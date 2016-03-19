@@ -5,7 +5,7 @@ CPU::CPU()
     A = 0;
     X = 0;
     Y = 0;
-    SP = 0xFF;
+    SP = 0xFD;
     PC = 0;
     P.byte = 0x34;
     cycles = 0;

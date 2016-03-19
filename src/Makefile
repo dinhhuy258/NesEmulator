@@ -1,7 +1,8 @@
 CC=g++
 FLAGS=-std=c++0x
-SOURCES=main.cpp\
-		CPU.cpp
+SOURCES=main.cpp \
+		CPU.cpp \
+		MemoryCPU.cpp
 BIN=NesEmulator
 
 all: $(SOURCES) $(BIN)

@@ -9,21 +9,27 @@ union ProcessorStatus
     struct BitFlags
     {
         /*
-         * Carry Flag: The carry flag is set if the last instruction resulted in an overflow 
-         * from bit 7 or and underflow from bit 0
-         * For example: performing 255 + 1 would result in an answer of 0 with the carry bit set
+         * Negative Flag: Bit 7 of a byte represents the sign of that byte, with 0 being positive and 1 being negative. 
+         * The negative flag (also known as the sign flag) is set if this sign bit is 1
          */
-        uint8_t C : 1;
+        uint8_t N : 1;
         /*
-         * Zero Flag: The zero flag is set if the result of the last instruction was Zero
+         * Overflow Flag: The overflow flag is set if an invalid two’s complement result was obtained by the previous instruction
+         * This means that a negative result has been obtained when a positive one was expected or vice versa
+         * However 64 + 64 gives the result -128 due to the sign bit. Therefore the overflow flag would be set
+         * The overflow flag is determined by taking the exclusive-or of the carry from between bits 6 and 7 and between bit 7
+         * and the carry flag 
          */
-        uint8_t Z : 1;
+        uint8_t V : 1;       
         /*
-         * Interrupt Disable: The interrupt disable flag can be used to prevent the system responding to IRQs
-         * It is set by the SEI (Set Interrupt Disable) instruction and IRQs will then be ignored until 
-         * execution of a CLI (Clear Interrupt Disable) instruction
+         * This bit is not used 
          */
-        uint8_t I : 1;
+        uint8_t reserved : 1;  
+        /*
+         * Break Command: The break command flag is used to indicate that a BRK (Break) instruction has 
+         * been executed, causing an IRQ
+         */
+        uint8_t B : 1;
         /*
          * Decimal Mode: The decimal mode flag is used to switch the 6502 into BCD mode
          * However the 2A03 does not support BCD mode so although the flag can be set, its value
@@ -32,27 +38,21 @@ union ProcessorStatus
         */
         uint8_t D : 1;
         /*
-         * Break Command: The break command flag is used to indicate that a BRK (Break) instruction has 
-         * been executed, causing an IRQ
+         * Interrupt Disable: The interrupt disable flag can be used to prevent the system responding to IRQs
+         * It is set by the SEI (Set Interrupt Disable) instruction and IRQs will then be ignored until 
+         * execution of a CLI (Clear Interrupt Disable) instruction
          */
-        uint8_t B : 1;
+        uint8_t I : 1;
         /*
-         * This bit is not used 
+         * Zero Flag: The zero flag is set if the result of the last instruction was Zero
          */
-        uint8_t reserved : 1;
+        uint8_t Z : 1;
         /*
-         * Overflow Flag: The overflow flag is set if an invalid two’s complement result was obtained by the previous instruction
-         * This means that a negative result has been obtained when a positive one was expected or vice versa
-         * However 64 + 64 gives the result -128 due to the sign bit. Therefore the overflow flag would be set
-         * The overflow flag is determined by taking the exclusive-or of the carry from between bits 6 and 7 and between bit 7
-         * and the carry flag 
+         * Carry Flag: The carry flag is set if the last instruction resulted in an overflow 
+         * from bit 7 or and underflow from bit 0
+         * For example: performing 255 + 1 would result in an answer of 0 with the carry bit set
          */
-        uint8_t V : 1; 
-        /*
-         * Negative Flag: Bit 7 of a byte represents the sign of that byte, with 0 being positive and 1 being negative. 
-         * The negative flag (also known as the sign flag) is set if this sign bit is 1
-         */
-        uint8_t N : 1;
+        uint8_t C : 1;
     } bits;
 };
 
