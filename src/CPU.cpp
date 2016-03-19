@@ -5,19 +5,147 @@ CPU::CPU()
     A = 0;
     X = 0;
     Y = 0;
-    SP = 0xFD;
+    SP = 0xFF;
     PC = 0;
     P.byte = 0x34;
     cycles = 0;
     (this->*opcodeFunctions[0x61])();
 }
 
-// Opcodes
-void CPU::ADC()
+// Adress mode
+uint8_t CPU::AddressAbsolute()
 {
+    // 6502 is little endian
+    uint16_t lo = memory.Read(PC++);
+    uint16_t hi = memory.Read(PC++);
+    uint16_t address = (hi << 8) | lo;
+    return memory.Read(address);
 }
 
-void CPU::AHX()
+uint8_t CPU::AddressAbsoluteX()
+{
+    // 6502 is little endian
+    uint16_t lo = memory.Read(PC++);
+    uint16_t hi = memory.Read(PC++);
+    uint16_t address = (hi << 8) | lo;
+    // If the result of Base+Index is greater than $FFFF, wrapping will occur.
+    if ((address & 0xFF00) != ((address + X) & 0xFF00)) 
+    {
+        // page cross
+    }
+    address = address + X;
+    return memory.Read(address);    
+}
+
+uint8_t CPU::AddressAbsoluteY()
+{
+    // 6502 is little endian
+    uint16_t lo = memory.Read(PC++);
+    uint16_t hi = memory.Read(PC++);
+    uint16_t address = (hi << 8) | lo;
+    // If the result of Base+Index is greater than $FFFF, wrapping will occur.
+    if ((address & 0xFF00) != ((address + Y) & 0xFF00)) 
+    {
+        // page cross
+    }
+    address = address + Y;
+    return memory.Read(address);
+}
+
+uint8_t CPU::AddressAccumulator()
+{
+    // not used
+    return 0;
+}
+
+uint8_t CPU::AddressImmediate()
+{
+    return PC++;
+}
+
+uint8_t CPU::AddressImplied()
+{
+    // not used
+    return 0;
+}
+
+uint8_t CPU::AddressIndirectX()
+{
+    // 6502 is little endian
+    uint16_t baseAddress = memory.Read(PC++);
+    // If Base_Location+Index is greater than $FF, wrapping will occur
+    if ((baseAddress + X) > 0xFF) 
+    {
+        // page cross
+    }
+    baseAddress = (baseAddress + X) & 0xFF;
+    uint16_t lo = memory.Read(baseAddress);
+    uint16_t hi = memory.Read((baseAddress + 1) & 0xFF);
+    uint16_t address = (hi << 8) | lo;
+    return memory.Read(address);
+}
+
+uint8_t CPU::AddressIndirect()
+{
+    // 6502 is little endian
+    uint16_t baseAddress = memory.Read(PC++);
+    uint16_t lo = memory.Read(baseAddress);
+    uint16_t hi = memory.Read((baseAddress + 1) & 0xFF);
+    uint16_t address = (hi << 8) | lo;
+    return memory.Read(address);
+}
+
+uint8_t CPU::AddressIndirectY()
+{
+    // 6502 is little endian
+    uint16_t baseAddress = memory.Read(PC++);
+    uint16_t lo = memory.Read(baseAddress);
+    uint16_t hi = memory.Read((baseAddress + 1) & 0xFF);
+    uint16_t address = (hi << 8) | lo;
+    // If Base_Location+Index is greater than $FFFF, wrapping will occur.
+    if ((address & 0xFF00) != ((address + Y) & 0xFF00)) 
+    {
+        // page cross
+    }
+    address = (address + Y);
+    return memory.Read(address);
+}
+
+uint8_t CPU::AddressRelative()
+{
+
+}
+
+uint8_t CPU::AddressZeroPage()
+{
+    uint16_t address = memory.Read(PC++);
+    return memory.Read(address & 0x00FF);
+}
+
+uint8_t CPU::AddressZeroPageX()
+{
+    uint16_t address = memory.Read(PC++);
+    if ((address + X) > 0xFF) 
+    {
+        // page cross
+    }
+    address = (address + X) & 0xFF;
+    return memory.Read(address & 0x00FF);
+}
+
+uint8_t CPU::AddressZeroPageY()
+{
+    uint16_t address = memory.Read(PC++);
+    if ((address + Y) > 0xFF) 
+    {
+        // page cross
+    }
+    address = (address + Y) & 0xFF;
+    return memory.Read(address & 0x00FF);
+}
+
+// Opcodes
+void CPU::ADC()
 {
 }
 
@@ -38,6 +166,10 @@ void CPU::ARR()
 }
 
 void CPU::ASL()
+{
+}
+
+void CPU::AXA()
 {
 }
 

@@ -1,7 +1,10 @@
 #ifndef _CPU_H_
 #define _CPU_H_
+
 #include <stdint.h>
 #include <string>
+
+#include "MemoryCPU.h"
 
 union ProcessorStatus
 {
@@ -56,6 +59,7 @@ union ProcessorStatus
     } bits;
 };
 
+// Refer http://homepage.ntlworld.com/cyborgsystems/CS_Main/6502/6502.htm#ADDR_MODE for more information
 enum AddressMode
 {
     Absolute,
@@ -64,9 +68,9 @@ enum AddressMode
     Accumulator,
     Immediate,
     Implied,
-    IndexedIndirect,
+    IndirectX,
     Indirect,
-    IndirectIndexed,
+    IndirectY,
     Relative,
     ZeroPage,
     ZeroPageX,
@@ -77,8 +81,6 @@ class CPU
 {
     public:
         CPU();
-
-    private:
 
     private:
         /*
@@ -114,6 +116,8 @@ class CPU
         ProcessorStatus P;
         // Number of cycles
         uint64_t cycles;
+        // CPU memory
+        MemoryCPU memory;
 
     private:
         // Opcodes table
@@ -129,7 +133,7 @@ class CPU
             /*6x*/"RTS", "ADC", "KIL", "RRA", "NOP", "ADC", "ROR", "RRA", "PLA", "ADC", "ROR", "ARR", "JMP", "ADC", "ROR", "RRA",
             /*7x*/"BVS", "ADC", "KIL", "RRA", "NOP", "ADC", "ROR", "RRA", "SEI", "ADC", "NOP", "RRA", "NOP", "ADC", "ROR", "RRA", 
             /*8x*/"NOP", "STA", "NOP", "SAX", "STY", "STA", "STX", "SAX", "DEY", "NOP", "TXA", "XAA", "STY", "STA", "STX", "SAX", 
-            /*9x*/"BCC", "STA", "KIL", "AHX", "STY", "STA", "STX", "SAX", "TYA", "STA", "TXS", "TAS", "SHY", "STA", "SHX", "AHX",
+            /*9x*/"BCC", "STA", "KIL", "AXA", "STY", "STA", "STX", "SAX", "TYA", "STA", "TXS", "TAS", "SHY", "STA", "SHX", "AXA",
             /*Ax*/"LDY", "LDA", "LDX", "LAX", "LDY", "LDA", "LDX", "LAX", "TAY", "LDA", "TAX", "LAX", "LDY", "LDA", "LDX", "LAX",
             /*Bx*/"BCS", "LDA", "KIL", "LAX", "LDY", "LDA", "LDX", "LAX", "CLV", "LDA", "TSX", "LAS", "LDY", "LDA", "LDX", "LAX",
             /*Cx*/"CPY", "CMP", "NOP", "DCP", "CPY", "CMP", "DEC", "DCP", "INY", "CMP", "DEX", "AXS", "CPY", "CMP", "DEC", "DCP",
@@ -149,7 +153,7 @@ class CPU
             /*6x*/&CPU::RTS, &CPU::ADC, &CPU::KIL, &CPU::RRA, &CPU::NOP, &CPU::ADC, &CPU::ROR, &CPU::RRA, &CPU::PLA, &CPU::ADC, &CPU::ROR, &CPU::ARR, &CPU::JMP, &CPU::ADC, &CPU::ROR, &CPU::RRA,
             /*7x*/&CPU::BVS, &CPU::ADC, &CPU::KIL, &CPU::RRA, &CPU::NOP, &CPU::ADC, &CPU::ROR, &CPU::RRA, &CPU::SEI, &CPU::ADC, &CPU::NOP, &CPU::RRA, &CPU::NOP, &CPU::ADC, &CPU::ROR, &CPU::RRA, 
             /*8x*/&CPU::NOP, &CPU::STA, &CPU::NOP, &CPU::SAX, &CPU::STY, &CPU::STA, &CPU::STX, &CPU::SAX, &CPU::DEY, &CPU::NOP, &CPU::TXA, &CPU::XAA, &CPU::STY, &CPU::STA, &CPU::STX, &CPU::SAX, 
-            /*9x*/&CPU::BCC, &CPU::STA, &CPU::KIL, &CPU::AHX, &CPU::STY, &CPU::STA, &CPU::STX, &CPU::SAX, &CPU::TYA, &CPU::STA, &CPU::TXS, &CPU::TAS, &CPU::SHY, &CPU::STA, &CPU::SHX, &CPU::AHX,
+            /*9x*/&CPU::BCC, &CPU::STA, &CPU::KIL, &CPU::AXA, &CPU::STY, &CPU::STA, &CPU::STX, &CPU::SAX, &CPU::TYA, &CPU::STA, &CPU::TXS, &CPU::TAS, &CPU::SHY, &CPU::STA, &CPU::SHX, &CPU::AXA,
             /*Ax*/&CPU::LDY, &CPU::LDA, &CPU::LDX, &CPU::LAX, &CPU::LDY, &CPU::LDA, &CPU::LDX, &CPU::LAX, &CPU::TAY, &CPU::LDA, &CPU::TAX, &CPU::LAX, &CPU::LDY, &CPU::LDA, &CPU::LDX, &CPU::LAX,
             /*Bx*/&CPU::BCS, &CPU::LDA, &CPU::KIL, &CPU::LAX, &CPU::LDY, &CPU::LDA, &CPU::LDX, &CPU::LAX, &CPU::CLV, &CPU::LDA, &CPU::TSX, &CPU::LAS, &CPU::LDY, &CPU::LDA, &CPU::LDX, &CPU::LAX,
             /*Cx*/&CPU::CPY, &CPU::CMP, &CPU::NOP, &CPU::DCP, &CPU::CPY, &CPU::CMP, &CPU::DEC, &CPU::DCP, &CPU::INY, &CPU::CMP, &CPU::DEX, &CPU::AXS, &CPU::CPY, &CPU::CMP, &CPU::DEC, &CPU::DCP,
@@ -158,25 +162,27 @@ class CPU
             /*Fx*/&CPU::BEQ, &CPU::SBC, &CPU::KIL, &CPU::ISC, &CPU::NOP, &CPU::SBC, &CPU::INC, &CPU::ISC, &CPU::SED, &CPU::SBC, &CPU::NOP, &CPU::ISC, &CPU::NOP, &CPU::SBC, &CPU::INC, &CPU::ISC,
         };
 
-        uint8_t opcodeTableMode[256] =
+        AddressMode opcodeAddressModeTable[256] = 
         {
-            6, 7, 6, 7, 11, 11, 11, 11, 6, 5, 4, 5, 1, 1, 1, 1,
-            10, 9, 6, 9, 12, 12, 12, 12, 6, 3, 6, 3, 2, 2, 2, 2,
-            1, 7, 6, 7, 11, 11, 11, 11, 6, 5, 4, 5, 1, 1, 1, 1,
-            10, 9, 6, 9, 12, 12, 12, 12, 6, 3, 6, 3, 2, 2, 2, 2,
-            6, 7, 6, 7, 11, 11, 11, 11, 6, 5, 4, 5, 1, 1, 1, 1,
-            10, 9, 6, 9, 12, 12, 12, 12, 6, 3, 6, 3, 2, 2, 2, 2,
-            6, 7, 6, 7, 11, 11, 11, 11, 6, 5, 4, 5, 8, 1, 1, 1,
-            10, 9, 6, 9, 12, 12, 12, 12, 6, 3, 6, 3, 2, 2, 2, 2,
-            5, 7, 5, 7, 11, 11, 11, 11, 6, 5, 6, 5, 1, 1, 1, 1,
-            10, 9, 6, 9, 12, 12, 13, 13, 6, 3, 6, 3, 2, 2, 3, 3,
-            5, 7, 5, 7, 11, 11, 11, 11, 6, 5, 6, 5, 1, 1, 1, 1,
-            10, 9, 6, 9, 12, 12, 13, 13, 6, 3, 6, 3, 2, 2, 3, 3,
-            5, 7, 5, 7, 11, 11, 11, 11, 6, 5, 6, 5, 1, 1, 1, 1,
-            10, 9, 6, 9, 12, 12, 12, 12, 6, 3, 6, 3, 2, 2, 2, 2,
-            5, 7, 5, 7, 11, 11, 11, 11, 6, 5, 6, 5, 1, 1, 1, 1,
-            10, 9, 6, 9, 12, 12, 12, 12, 6, 3, 6, 3, 2, 2, 2, 2,
+                  /*x0            x1          x2            x3          x4           x5           x6           x7          x8             x9          xA             xB           xC           xD          xE            xF*/
+            /*0x*/Implied,    IndirectX,   Implied,     IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Accumulator,   Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
+            /*1x*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
+            /*2x*/Absolute,   IndirectX,   Implied,     IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Accumulator,   Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
+            /*3x*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
+            /*4x*/Implied,    IndirectX,   Implied,     IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Accumulator,   Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
+            /*5x*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
+            /*6x*/Implied,    IndirectX,   Implied,     IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Accumulator,   Immediate,   Indirect,    Absolute,    Absolute,    Absolute,
+            /*7x*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
+            /*8x*/Immediate,  IndirectX,   Immediate,   IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Implied,       Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
+            /*9x*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageY,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteY,   AbsoluteY,
+            /*Ax*/Immediate,  IndirectX,   Immediate,   IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Implied,       Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
+            /*Bx*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageY,   ZeroPageY,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteY,   AbsoluteY,
+            /*Cx*/Immediate,  IndirectX,   Immediate,   IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Implied,       Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
+            /*Dx*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
+            /*Ex*/Immediate,  IndirectX,   Immediate,   IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Implied,       Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
+            /*Fx*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
         };
+        
         uint8_t opcodeTableSize[256] =
         {
             1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
@@ -196,6 +202,7 @@ class CPU
             2, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
             2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
         };
+
         uint8_t opcodeTableCycle[256] =
         {
             7, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
@@ -215,6 +222,7 @@ class CPU
             2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
             2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
         };
+
         uint8_t opcodeTablePageCycle[256] =
         {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -236,14 +244,29 @@ class CPU
         };
 
     private:
+        // Adress mode
+        uint8_t AddressAbsolute();
+        uint8_t AddressAbsoluteX();
+        uint8_t AddressAbsoluteY();
+        uint8_t AddressAccumulator();
+        uint8_t AddressImmediate();
+        uint8_t AddressImplied();
+        uint8_t AddressIndirectX();
+        uint8_t AddressIndirect();
+        uint8_t AddressIndirectY();
+        uint8_t AddressRelative();
+        uint8_t AddressZeroPage();
+        uint8_t AddressZeroPageX();
+        uint8_t AddressZeroPageY();
+
         // Opcodes
         void ADC();
-        void AHX();
         void ALR();
         void ANC();
         void AND();
         void ARR();
         void ASL();
+        void AXA();
         void AXS();
 
         void BCC();
