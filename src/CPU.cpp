@@ -51,7 +51,7 @@ uint8_t CPU::AddressAbsoluteY(bool checkPage)
     // If the result of Base+Index is greater than $FFFF, wrapping will occur.
     if (checkPage && ((address & 0xFF00) != ((address + Y) & 0xFF00))) 
     {
-        // page cross\
+        // page crossed
         ++cycles;
     }
     address = address + Y;
@@ -151,7 +151,7 @@ void CPU::StackPush(uint8_t value)
     --SP;
 }
 
-uint8_t CPU::StackPop()
+uint8_t CPU::StackPull()
 {
     ++SP;
     return memory.Read(0x0100 | SP);
@@ -208,7 +208,7 @@ void CPU::ADC()
     uint16_t result = A + value + P.bits.C;
     P.bits.V = ((A & 0x80) != (result & 0x80)) ? SET : CLEAR;
     P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
-    P.bits.Z = (result == 0) ? SET : CLEAR;
+    P.bits.Z = ((result & 0xFF) == 0) ? SET : CLEAR;
     P.bits.C = (result > 0xFF) ? SET : CLEAR;
     A = (uint8_t)(result & 0xFF);
     cycles += opcodeCycles[currentOpcode];
@@ -315,7 +315,7 @@ void CPU::ASL()
             assert(0);
     }
     P.bits.C = (value & 0x80 == 0x80) ? SET : CLEAR;
-    uint8_t result = (value << 1) & 0xFE; // make sure that the last bit is equal 0
+    uint8_t result = (value << 1) & 0xFE; // make sure that the lowest bit is equal 0
     P.bits.Z = (result == 0) ? SET : CLEAR;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     switch(opcodeAddressModes[currentOpcode])
@@ -967,16 +967,54 @@ void CPU::ISC()
 
 void CPU::JMP()
 {
+    /*
+     * GOTO Address
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Absolute      JMP $5597     $4C  3   3
+     * Indirect      JMP ($5597)   $6C  3   5
+     */
+    uint16_t lo = memory.Read(PC++);
+    uint16_t hi = memory.Read(PC++);
+    uint16_t address = (hi << 8) | lo;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Absolute:
+            PC = address;
+            break;
+        case Indirect:
+            lo = memory.Read(address);
+            hi = memory.Read((address + 1) & 0xFF);
+            address = (hi << 8) | lo;
+            PC = address;
+            break;
+        default:
+            assert(0);
+    }
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::JSR()
 {
+   /*
+     * Jump to SubRoutine
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Absolute      JSR $5597     $20  3   6
+     */ 
+    uint16_t lo = memory.Read(PC++);
+    uint16_t hi = memory.Read(PC++);
+    uint16_t address = (hi << 8) | lo;
+    --PC;
+    StackPush((PC >> 8) & 0xFF);
+    StackPush(PC & 0xFF);
+    PC = address;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::KIL()
 {
 }
-
 
 void CPU::LAS()
 {
@@ -988,42 +1026,315 @@ void CPU::LAX()
 
 void CPU::LDA()
 {
+    /*
+     * Load A with Memory
+     * Affects Flags: N Z
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Immediate     LDA #$44      $A9  2   2
+     * Zero Page     LDA $44       $A5  2   3
+     * Zero Page,X   LDA $44,X     $B5  2   4
+     * Absolute      LDA $4400     $AD  3   4
+     * Absolute,X    LDA $4400,X   $BD  3   4+
+     * Absolute,Y    LDA $4400,Y   $B9  3   4+
+     * Indirect,X    LDA ($44,X)   $A1  2   6
+     * Indirect,Y    LDA ($44),Y   $B1  2   5+
+     *
+     * + Add 1 cycle if page boundary crossed
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Immediate:
+            value = AddressImmediate();
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageX:
+            value = AddressZeroPageX();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteX:
+            value = AddressAbsoluteX(true);
+            break;
+        case AbsoluteY:
+            value = AddressAbsoluteY(true);
+            break;
+        case IndirectX:
+            value = AddressIndirectX();
+            break;
+        case IndirectY:
+            value = AddressIndirectY(true);
+            break;
+        default:
+            assert(0);
+    }
+    A = value;
+    P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (A == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::LDX()
 {
+    /*
+     * Load X with Memory
+     * Affects Flags: N Z
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Immediate     LDX #$44      $A2  2   2
+     * Zero Page     LDX $44       $A6  2   3
+     * Zero Page,Y   LDX $44,Y     $B6  2   4
+     * Absolute      LDX $4400     $AE  3   4
+     * Absolute,Y    LDX $4400,Y   $BE  3   4+
+     *
+     * + Add 1 cycle if page boundary crossed
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Immediate:
+            value = AddressImmediate();
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageY:
+            value = AddressZeroPageY();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteY:
+            value = AddressAbsoluteY(true);
+            break;
+        default:
+            assert(0);
+    }
+    X = value;
+    P.bits.N = ((X & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (X == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::LDY()
 {
+    /*
+     * Load Y with Memory
+     * Affects Flags: N Z
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Immediate     LDY #$44      $A0  2   2
+     * Zero Page     LDY $44       $A4  2   3
+     * Zero Page,X   LDY $44,X     $B4  2   4
+     * Absolute      LDY $4400     $AC  3   4
+     * Absolute,X    LDY $4400,X   $BC  3   4+
+     *
+     * + Add 1 cycle if page boundary crossed
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Immediate:
+            value = AddressImmediate();
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageX:
+            value = AddressZeroPageX();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteX:
+            value = AddressAbsoluteX(true);
+            break;
+        default:
+            assert(0);
+    }
+    Y = value;
+    P.bits.N = ((Y & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (Y == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::LSR()
 {
+    /*
+     * Logical Shift Right
+     * Affects Flags: N Z C
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Accumulator   LSR A         $4A  1   2
+     * Zero Page     LSR $44       $46  2   5
+     * Zero Page,X   LSR $44,X     $56  2   6
+     * Absolute      LSR $4400     $4E  3   6
+     * Absolute,X    LSR $4400,X   $5E  3   7
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Accumulator:
+            value = AddressAccumulator();
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageX:
+            value = AddressZeroPageX();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteX:
+            value = AddressAbsoluteX();
+            break;
+        default:
+            assert(0);
+    }
+    P.bits.N = CLEAR;
+    P.bits.C = value & 0x01;
+    uint8_t result = (value >> 1) & 0x7F; // make sure that the highest bit is equal 0
+    P.bits.Z = (result == 0) ? SET : CLEAR;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Accumulator:
+            A = result;
+            break;
+        default:
+            memory.Write(lastAddress, result);
+            break;
+    }
+    cycles += opcodeCycles[currentOpcode];
 }
 
+/*
+ * @todo implement undocument nop opcode
+ */
 void CPU::NOP()
 {
+    /*
+     * No OPeration
+     * 
+     * MODE           SYNTAX       HEX LEN TIM
+     * Implied        NOP           $EA  1   2 
+     */
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::ORA()
 {
+    /*
+     * Bitwise-OR A with Memory
+     * Affects Flags: N Z
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Immediate     ORA #$44      $09  2   2
+     * Zero Page     ORA $44       $05  2   3
+     * Zero Page,X   ORA $44,X     $15  2   4
+     * Absolute      ORA $4400     $0D  3   4
+     * Absolute,X    ORA $4400,X   $1D  3   4+
+     * Absolute,Y    ORA $4400,Y   $19  3   4+
+     * Indirect,X    ORA ($44,X)   $01  2   6
+     * Indirect,Y    ORA ($44),Y   $11  2   5+
+     *
+     * + Add 1 cycle if page boundary crossed
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Immediate:
+            value = AddressImmediate();
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageX:
+            value = AddressZeroPageX();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteX:
+            value = AddressAbsoluteX(true);
+            break;
+        case AbsoluteY:
+            value = AddressAbsoluteY(true);
+            break;
+        case IndirectX:
+            value = AddressIndirectX();
+            break;
+        case IndirectY:
+            value = AddressIndirectY(true);
+            break;
+        default:
+            assert(0);
+    }
+    A = A | value;
+    P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (A == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
+
 }
 
 void CPU::PHA()
 {
+    /*
+     * PusH A onto Stack
+     * 
+     * MODE           SYNTAX       HEX LEN TIM
+     * Implied         PHA         $48  1   3
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    StackPush(A);
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::PHP()
 {
+    /*
+     * PusH P onto Stack
+     * 
+     * MODE           SYNTAX       HEX LEN TIM
+     * Implied         PHP         $08  1   3
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    StackPush(P.byte);
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::PLA()
 {
+    /*
+     * PulL from Stack to A
+     * Affects Flags: N Z
+     * 
+     * MODE           SYNTAX       HEX LEN TIM
+     * Implied         PLA         $68  1   4
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    A = StackPull();
+    P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (A == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::PLP()
 {
+    /*
+     * PulL from Stack to P
+     * Affects Flags: N V B D I Z C
+     * 
+     * MODE           SYNTAX       HEX LEN TIM
+     * Implied         PLP         $28  1   4
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    P.byte = StackPull();
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::RLA()
@@ -1032,10 +1343,106 @@ void CPU::RLA()
 
 void CPU::ROL()
 {
+    /*
+     * ROtate Left
+     * Affects Flags: N Z C
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Accumulator   ROL A         $2A  1   2
+     * Zero Page     ROL $44       $26  2   5
+     * Zero Page,X   ROL $44,X     $36  2   6
+     * Absolute      ROL $4400     $2E  3   6
+     * Absolute,X    ROL $4400,X   $3E  3   7
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Accumulator:
+            value = AddressAccumulator();
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageX:
+            value = AddressZeroPageX();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteX:
+            value = AddressAbsoluteX();
+            break;
+        default:
+            assert(0);
+    }
+    uint8_t temp = value & 0x80; // save the highest bit for P.C
+    uint8_t result = (value << 1) & 0xFE; // make sure that the lowest bit is equal 0
+    result = result | P.bits.C; // assign P.C to the lowest bit of the result
+    P.bits.C = ((temp & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (result == 0) ? SET : CLEAR;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Accumulator:
+            A = result;
+            break;
+        default:
+            memory.Write(lastAddress, result);
+            break;
+    }
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::ROR()
 {
+    /*
+     * ROtate Right
+     * Affects Flags: N Z C
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Accumulator   ROR A         $6A  1   2
+     * Zero Page     ROR $44       $66  2   5
+     * Zero Page,X   ROR $44,X     $76  2   6
+     * Absolute      ROR $4400     $6E  3   6
+     * Absolute,X    ROR $4400,X   $7E  3   7
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Accumulator:
+            value = AddressAccumulator();
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageX:
+            value = AddressZeroPageX();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteX:
+            value = AddressAbsoluteX();
+            break;
+        default:
+            assert(0);
+    }
+    uint8_t temp = value & 0x01; // save the lowest bit for P.C
+    uint8_t result = (value >> 1) & 0x7F; // make sure that the highest bit is equal 0
+    result = result | ((P.bits.C == SET) ? 0x80 : 0x00); // assign P.C to the highest bit of the result
+    P.bits.C = ((temp & 0x01) == 0x01) ? SET : CLEAR;
+    P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (result == 0) ? SET : CLEAR;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Accumulator:
+            A = result;
+            break;
+        default:
+            memory.Write(lastAddress, result);
+            break;
+    }
+    cycles += opcodeCycles[currentOpcode];    
 }
 
 void CPU::RRA()
@@ -1044,10 +1451,36 @@ void CPU::RRA()
 
 void CPU::RTI()
 {
+    /*
+     * ReTurn from Interrupt
+     * Affects Flags: N V B D I Z C 
+     *
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        RTI          $40  1   6
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);   
+    P.byte = StackPull();
+    uint16_t lo = StackPull();
+    uint16_t hi = StackPull();
+    uint16_t address = (hi << 8) | lo;
+    PC = address;
+    cycles += opcodeCycles[currentOpcode]; 
 }
 
 void CPU::RTS()
 {
+    /*
+     * ReTurn from Subroutine
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        RTS          $60  1   6
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied); 
+    uint16_t lo = StackPull();
+    uint16_t hi = StackPull();
+    uint16_t address = (hi << 8) | lo;
+    PC = address + 1;
+    cycles += opcodeCycles[currentOpcode]; 
 }
 
 void CPU::SAX()
@@ -1056,18 +1489,101 @@ void CPU::SAX()
 
 void CPU::SBC()
 {
+    /*
+     * Subtract Memory from A with Borrow
+     * Affects Flags: V N Z C
+     * 
+     * MODE           SYNTAX       HEX LEN TIM
+     * Immediate     SBC #$44      $E9  2   2
+     * Zero Page     SBC $44       $E5  2   3
+     * Zero Page,X   SBC $44,X     $F5  2   4
+     * Absolute      SBC $4400     $ED  3   4
+     * Absolute,X    SBC $4400,X   $FD  3   4+
+     * Absolute,Y    SBC $4400,Y   $F9  3   4+
+     * Indirect,X    SBC ($44,X)   $E1  2   6
+     * Indirect,Y    SBC ($44),Y   $F1  2   5+
+     *
+     * + Add 1 cycle if page boundary crossed
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Immediate:
+            value = AddressImmediate();
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageX:
+            value = AddressZeroPageX();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteX:
+            value = AddressAbsoluteX(true);
+            break;
+        case AbsoluteY:
+            value = AddressAbsoluteY(true);
+            break;
+        case IndirectX:
+            value = AddressIndirectX();
+            break;
+        case IndirectY:
+            value = AddressIndirectY(true);
+            break;
+        default:
+            assert(0);
+    }
+    int16_t result = A - value - (P.bits.C == CLEAR ? 1 : 0);    
+    P.bits.V = ((result > 127) | (result < -128)) ? SET : CLEAR;
+    P.bits.C = (result >= 0) ? CLEAR : SET;
+    P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = ((result & 0xFF) == 0) ? SET : CLEAR;
+    A = (uint8_t)(result & 0xFF);
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::SEC()
 {
+    /*
+     * Set Carry flag (P.C)
+     * Affects Flags: C
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        SEC          $38  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    P.bits.C = SET;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::SED()
 {
+    /*
+     * Set Binary Coded Decimal Flag (P.D)
+     * Affects Flags: D
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        SED          $F8  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    P.bits.D = SET;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::SEI()
 {
+    /*
+     * Set Interrupt (disable) Flag (P.I)
+     * Affects Flags: I
+     *
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        SEI          $78  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    P.bits.I = SET;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::SHX()
@@ -1088,14 +1604,102 @@ void CPU::SRE()
 
 void CPU::STA()
 {
+    /*
+     * Store A in Memory 
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Zero Page     STA $44       $85  2   3
+     * Zero Page,X   STA $44,X     $95  2   4
+     * Absolute      STA $4400     $8D  3   4
+     * Absolute,X    STA $4400,X   $9D  3   5
+     * Absolute,Y    STA $4400,Y   $99  3   5
+     * Indirect,X    STA ($44,X)   $81  2   6
+     * Indirect,Y    STA ($44),Y   $91  2   6
+     */
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case ZeroPage:
+            AddressZeroPage(); // get lastAddress
+            break;
+        case ZeroPageX:
+            AddressZeroPageX(); // get lastAddress
+            break;
+        case Absolute:
+            AddressAbsolute(); // get lastAddress
+            break;
+        case AbsoluteX:
+            AddressAbsoluteX(); // get lastAddress
+            break;
+        case AbsoluteY:
+            AddressAbsoluteY(); // get lastAddress
+            break;
+        case IndirectX:
+            AddressIndirectX(); // get lastAddress
+            break;
+        case IndirectY:
+            AddressIndirectY(); // get lastAddress
+            break;
+        default:
+            assert(0);
+    }
+    memory.Write(lastAddress, A);
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::STX()
 {
+    /*
+     * Store X in Memory 
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Zero Page     STX $44       $86  2   3
+     * Zero Page,Y   STX $44,Y     $96  2   4
+     * Absolute      STX $4400     $8E  3   4
+     */
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case ZeroPage:
+            AddressZeroPage(); // get lastAddress
+            break;
+        case ZeroPageY:
+            AddressZeroPageY(); // get lastAddress
+            break;
+        case Absolute:
+            AddressAbsolute(); // get lastAddress
+            break;
+        default:
+            assert(0);
+    }
+    memory.Write(lastAddress, X);
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::STY()
 {
+    /*
+     * Store Y in Memory 
+     *
+     * MODE           SYNTAX       HEX LEN TIM
+     * Zero Page     STY $44       $84  2   3
+     * Zero Page,X   STY $44,X     $94  2   4
+     * Absolute      STY $4400     $8C  3   4
+     */
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case ZeroPage:
+            AddressZeroPage(); // get lastAddress
+            break;
+        case ZeroPageX:
+            AddressZeroPageX(); // get lastAddress
+            break;
+        case Absolute:
+            AddressAbsolute(); // get lastAddress
+            break;
+        default:
+            assert(0);
+    }
+    memory.Write(lastAddress, Y);
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::TAS()
@@ -1104,26 +1708,95 @@ void CPU::TAS()
 
 void CPU::TAX()
 {
+    /*
+     * Transfer A to X
+     * Affects Flags: N Z
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        TAX          $AA  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    X = A;
+    P.bits.N = ((X & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (X == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::TAY()
 {
+    /*
+     * Transfer A to Y
+     * Affects Flags: Z N
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        TAY          $A8  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    Y = A;
+    P.bits.N = ((Y & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (Y == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::TSX()
 {
+    /*
+     * Transfer Stack Pointer to X
+     * Affects Flags: N Z
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        TSX          $BA  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    X = SP;
+    P.bits.N = ((X & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (X == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::TXA()
 {
+    /*
+     * Transfer X to A
+     * Affects Flags: N Z
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        TXA          $8A  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    A = X;
+    P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (A == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::TXS()
 {
+    /*
+     * Transfer X to Stack Pointer
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        TXS          $9A  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    SP = X;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::TYA()
 {
+    /*
+     * Transfer Y to A
+     * Affects Flags: N Z
+     * 
+     * MODE           SYNTAX       HEX  LEN TIM
+     * Implied        TYA          $98  1   2
+     */
+    assert(opcodeAddressModes[currentOpcode] == Implied);
+    A = Y;
+    P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (A == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
 }
 
 void CPU::XAA()

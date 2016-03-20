@@ -118,8 +118,15 @@ class CPU
         uint64_t cycles;
         // CPU memory
         MemoryCPU memory;
-        // The current opcode that
+        /*
+         * The current opcode that we read from PC
+         * We need this value to access the opcodeAddressModes or opcodeCycles in Opcode implementation function
+         */
         uint8_t currentOpcode;
+        /*
+         * Contain the last address that we read value from the memory 
+         * Used to write the value back to this address in ASL, LSR, ROL opcode
+         */
         uint16_t lastAddress;
 
     private:
@@ -264,7 +271,7 @@ class CPU
         uint8_t AddressZeroPageY();
         // Memory
         void StackPush(uint8_t value);
-        uint8_t StackPop();
+        uint8_t StackPull();
         // Opcodes
         void ADC();
         void ALR();
