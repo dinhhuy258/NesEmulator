@@ -12,7 +12,7 @@ union ProcessorStatus
     struct BitFlags
     {
         /*
-         * Negative Flag: Bit 7 of a byte represents the sign of that byte, with 0 being positive and 1 being negative. 
+         * Negative  Flag: Bit 7 of a byte represents the sign of that byte, with 0 being positive and 1 being negative. 
          * The negative flag (also known as the sign flag) is set if this sign bit is 1
          */
         uint8_t N : 1;
@@ -118,10 +118,13 @@ class CPU
         uint64_t cycles;
         // CPU memory
         MemoryCPU memory;
+        // The current opcode that
+        uint8_t currentOpcode;
+        uint16_t lastAddress;
 
     private:
         // Opcodes table
-        std::string opcodeTable[256] = 
+        std::string opcodeNames[256] = 
         {
                  /*x0     x1     x2     x3     x4     x5     x6     x7     x8     x9     xA     xB     xC     xD     xE     xF*/
             /*0x*/"BRK", "ORA", "KIL", "SLO", "NOP", "ORA", "ASL", "SLO", "PHP", "ORA", "ASL", "ANC", "NOP", "ORA", "ASL", "SLO",
@@ -162,7 +165,7 @@ class CPU
             /*Fx*/&CPU::BEQ, &CPU::SBC, &CPU::KIL, &CPU::ISC, &CPU::NOP, &CPU::SBC, &CPU::INC, &CPU::ISC, &CPU::SED, &CPU::SBC, &CPU::NOP, &CPU::ISC, &CPU::NOP, &CPU::SBC, &CPU::INC, &CPU::ISC,
         };
 
-        AddressMode opcodeAddressModeTable[256] = 
+        AddressMode opcodeAddressModes[256] = 
         {
                   /*x0            x1          x2            x3          x4           x5           x6           x7          x8             x9          xA             xB           xC           xD          xE            xF*/
             /*0x*/Implied,    IndirectX,   Implied,     IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Accumulator,   Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
@@ -181,8 +184,29 @@ class CPU
             /*Dx*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
             /*Ex*/Immediate,  IndirectX,   Immediate,   IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Implied,       Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
             /*Fx*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
-        };
+        }; 
         
+        uint8_t opcodeCycles[256] =
+        {
+                /*x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 xA xB xC xD xE xF*/
+            /*0x*/7, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
+            /*1x*/2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+            /*2x*/6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,
+            /*3x*/2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+            /*4x*/6, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 3, 4, 6, 6,
+            /*5x*/2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+            /*6x*/6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,
+            /*7x*/2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+            /*8x*/2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+            /*9x*/2, 6, 2, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,
+            /*Ax*/2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+            /*Bx*/2, 5, 2, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,
+            /*Cx*/2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+            /*Dx*/2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+            /*Ex*/2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+            /*Fx*/2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+        };
+
         uint8_t opcodeTableSize[256] =
         {
             1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
@@ -201,26 +225,6 @@ class CPU
             2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
             2, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
             2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
-        };
-
-        uint8_t opcodeTableCycle[256] =
-        {
-            7, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
-            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-            6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,
-            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-            6, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 3, 4, 6, 6,
-            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-            6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,
-            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-            2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
-            2, 6, 2, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,
-            2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
-            2, 5, 2, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,
-            2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
-            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
-            2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
-            2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
         };
 
         uint8_t opcodeTablePageCycle[256] =
@@ -246,19 +250,21 @@ class CPU
     private:
         // Adress mode
         uint8_t AddressAbsolute();
-        uint8_t AddressAbsoluteX();
-        uint8_t AddressAbsoluteY();
+        uint8_t AddressAbsoluteX(bool checkPage = false);
+        uint8_t AddressAbsoluteY(bool checkPage = false);
         uint8_t AddressAccumulator();
         uint8_t AddressImmediate();
         uint8_t AddressImplied();
         uint8_t AddressIndirectX();
         uint8_t AddressIndirect();
-        uint8_t AddressIndirectY();
+        uint8_t AddressIndirectY(bool checkPage = false);
         uint8_t AddressRelative();
         uint8_t AddressZeroPage();
         uint8_t AddressZeroPageX();
         uint8_t AddressZeroPageY();
-
+        // Memory
+        void StackPush(uint8_t value);
+        uint8_t StackPop();
         // Opcodes
         void ADC();
         void ALR();
@@ -280,8 +286,8 @@ class CPU
         void BVC();
         void BVS();
 
-        void CLD();
         void CLC();
+        void CLD();
         void CLI();
         void CLV();
         void CMP();
