@@ -13,7 +13,7 @@
  * LICENSE: This source code is released into the    *
  * public domain, but if you use it please do give   *
  * credit. I put a lot of effort into writing this!  *
- *                                                   *
+ *                                                   * 
  *****************************************************
  * Fake6502 is a MOS Technology 6502 CPU emulation   *
  * engine in C. It was written as part of a Nintendo *

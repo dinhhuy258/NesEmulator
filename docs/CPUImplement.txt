@@ -2,7 +2,7 @@
  * (c)2011 Mike Chambers (miker00lz@gmail.com)       *
  *****************************************************
  * v1.1 - Small bugfix in BIT opcode, but it was the *
- *        difference between a few games in my NES   *
+ *        difference between a few games in my NES   * 
  *        emulator working and being broken!         *
  *        I went through the rest carefully again    *
  *        after fixing it just to make sure I didn't *
