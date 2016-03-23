@@ -20,5 +20,8 @@
 #define RESET_VECTOR_HIGH   0xFFFD
 #define IRQ_VECTOR_LOW      0xFFFE
 #define IRQ_VECTOR_HIGH     0xFFFF
+// Macro
+#define SAFE_DEL(p) if ((p) != NULL) { delete (p); (p) = NULL;}
+#define LOGI(...) printf(__VA_ARGS__); printf("\n");
 
 #endif //_PLATFORMS_H_
