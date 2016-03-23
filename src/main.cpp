@@ -5,6 +5,6 @@ int main()
 {
     //CPU cpu;
     Cartridge cartridge;
-    cartridge.LoadNESFile("../../Mario.nes");
+    cartridge.LoadNESFile("../rom/Mario.nes");
     return 0;
 }

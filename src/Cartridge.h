@@ -32,11 +32,11 @@ struct NESFileHeader
         uint8_t byte;
         struct RomControlBit1
         {
-            uint8_t mapperNumber : 4;
-            uint8_t fourScreenMode : 1;
-            uint8_t trainerPresent : 1;
-            uint8_t batteryBackedPresent : 1;
             uint8_t mirroring : 1;
+            uint8_t batteryBackedPresent : 1;
+            uint8_t trainerPresent : 1;
+            uint8_t fourScreenMode : 1;
+            uint8_t mapperNumber : 4;      
         }bits;
     }romControlByte1;
     /*
@@ -51,8 +51,8 @@ struct NESFileHeader
         uint8_t byte;
         struct RomControlBit2
         {
-            uint8_t mapperNumber : 4;
             uint8_t reserved : 4;
+            uint8_t mapperNumber : 4;           
         }bits;
     }romControlByte2;
     uint8_t numRam; // Number of 8 KB RAM banks. For compatibility with previous versions of the iNES format, assume 1 page of RAM when this is 0
@@ -67,7 +67,7 @@ class Cartridge
     private:
         NESFileHeader header;
         uint8_t **prgRom;
-        uint8_t **chrRom;
+        uint8_t **chrRomRam;
         Mirroring mirroring;
         uint8_t mapper;
         bool isCHRRam;
