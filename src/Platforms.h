@@ -22,6 +22,7 @@
 #define IRQ_VECTOR_HIGH     0xFFFF
 // Macro
 #define SAFE_DEL(p) if ((p) != NULL) { delete (p); (p) = NULL;}
+#define SAFE_DEL_ARRAY(p) if ((p) != NULL) { delete[] (p); (p) = NULL;}
 #define LOGI(...) printf(__VA_ARGS__); printf("\n");
 
 #endif //_PLATFORMS_H_

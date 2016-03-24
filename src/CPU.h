@@ -80,7 +80,7 @@ enum AddressMode
 class CPU
 {
     public:
-        CPU();
+        CPU(Memory *memory);
 
     private:
         /*
@@ -117,7 +117,7 @@ class CPU
         // Number of cycles
         uint64_t cycles;
         // CPU memory
-        MemoryCPU memory;
+        Memory *memory;
         /*
          * The current opcode that we read from PC
          * We need this value to access the opcodeAddressModes or opcodeCycles in Opcode implementation function
@@ -270,7 +270,7 @@ class CPU
         uint8_t AddressZeroPageX();
         uint8_t AddressZeroPageY();
         // Memory
-        void StackPush(uint8_t value);
+        void StackPush(uint8_t value);  
         uint8_t StackPull();
         // Opcodes
         void ADC();

@@ -20,9 +20,13 @@ uint8_t MemoryCPU::Read(uint16_t address)
         // 0x2008-0x3FFF mirrors 0x2000-0x2007
         return data[address & 0x2007];
     }
-    else
+    else if (address < 0x8000)
     {
         return data[address];
+    }
+    else
+    {
+        
     }
 }
 
@@ -46,8 +50,12 @@ void MemoryCPU::Write(uint16_t address, uint8_t value)
         // 0x2008-0x3FFF mirrors 0x2000-0x2007
         data[address & 0x2007] = value;
     }
-    else
+    else if (address < 0x8000)
     {
         data[address] = value;
+    }
+    else
+    {
+        
     }
 }

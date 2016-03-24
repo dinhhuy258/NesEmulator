@@ -62,8 +62,14 @@ struct NESFileHeader
 class Cartridge
 {
     public:
+        Cartridge();
+        ~Cartridge();
         bool LoadNESFile(std::string fileName);
-
+        uint8_t ReadPRG(uint8_t bank, uint16_t address);
+        uint8_t ReadCHR(uint8_t bank, uint16_t address);
+        uint8_t WriteCHR(uint8_t bank, uint16_t address, uint8_t value);
+        uint8_t GetMapperNumber();
+        uint8_t GetNumPRG();
     private:
         NESFileHeader header;
         uint8_t **prgRom;

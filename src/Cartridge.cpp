@@ -2,6 +2,30 @@
 #include <fstream> 
 #include "Platforms.h"
 
+Cartridge::Cartridge()
+{
+    prgRom = NULL;
+    chrRomRam = NULL;
+}
+
+Cartridge::~Cartridge()
+{
+    for (uint8_t i = 0; i < header.numPRG; ++i)
+    {
+        SAFE_DEL_ARRAY(prgRom[i]);
+    }
+    for (uint8_t i = 0; i < header.numCHR; ++i)
+    {
+        SAFE_DEL_ARRAY(chrRomRam[i]);
+    }
+    if (header.numCHR == 0)
+    {
+        SAFE_DEL_ARRAY(chrRomRam[0]);
+    }
+    SAFE_DEL_ARRAY(prgRom);
+    SAFE_DEL_ARRAY(chrRomRam);
+}
+
 bool Cartridge::LoadNESFile(std::string fileName)
 {
     std::ifstream is(fileName, std::ifstream::binary);
@@ -34,6 +58,7 @@ bool Cartridge::LoadNESFile(std::string fileName)
             // If this value is equal 0. It mean we have 8192 byte charactor RAM pages instead of charactor ROM pages
             isCHRRam = true; 
             chrRomRam = new uint8_t*[1];
+            chrRomRam[0] = new uint8_t[8192]; //8KB
         }
         else
         {
@@ -57,4 +82,32 @@ bool Cartridge::LoadNESFile(std::string fileName)
         LOGI("Can't open NES file");
         return false;
     }
+}
+
+uint8_t Cartridge::ReadPRG(uint8_t bank, uint16_t address)
+{
+    return prgRom[bank][address];
+}
+
+uint8_t Cartridge::ReadCHR(uint8_t bank, uint16_t address)
+{
+    return chrRomRam[bank][address];
+}
+
+uint8_t Cartridge::WriteCHR(uint8_t bank, uint16_t address, uint8_t value)
+{
+    if (isCHRRam)
+    {
+        chrRomRam[bank][address] = value;  
+    }
+}
+
+uint8_t Cartridge::GetMapperNumber()
+{
+    return mapper;
+}
+
+uint8_t Cartridge::GetNumPRG()
+{
+    return header.numPRG;
 }
