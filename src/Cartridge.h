@@ -30,7 +30,7 @@ struct NESFileHeader
     union RomControlByte1
     {
         uint8_t byte;
-        struct RomControlBit1
+        struct RomControlBits1
         {
             uint8_t mirroring : 1;
             uint8_t batteryBackedPresent : 1;
@@ -49,7 +49,7 @@ struct NESFileHeader
     union RomControlByte2
     {
         uint8_t byte;
-        struct RomControlBit2
+        struct RomControlBits2
         {
             uint8_t reserved : 4;
             uint8_t mapperNumber : 4;           

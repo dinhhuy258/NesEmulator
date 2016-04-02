@@ -2,7 +2,7 @@
 #include <assert.h>
 #include "Platforms.h"
 
-CPU::CPU(Memory *memory)
+CPU::CPU(Memory *cpuMemory)
 {
     A = 0;
     X = 0;
@@ -11,25 +11,48 @@ CPU::CPU(Memory *memory)
     PC = 0;
     P.byte = 0x34;
     cycles = 0;
-    this->memory = memory;
+    stall = 0;
+    this->cpuMemory = cpuMemory;
+    interrupt = InterruptNone;
+}
+
+uint8_t CPU::Step()
+{
+    if (stall > 0)
+    {
+        // Suspend CPU after writting DMA. It will take 1 cycle for each step
+        --stall;
+        return 1;
+    }
+    uint64_t savedCycles = cycles;
+    switch (interrupt)
+    {
+        case InterruptNMI:
+            NMI();
+            break;
+        case InterruptIRQ:
+            IRQ();
+            break;
+    }
+    // Remember implement NMI and IRQ function
 }
 
 // Address mode
 uint8_t CPU::AddressAbsolute()
 {
     // 6502 is little endian
-    uint16_t lo = memory->Read(PC++);
-    uint16_t hi = memory->Read(PC++);
+    uint16_t lo = cpuMemory->Read(PC++);
+    uint16_t hi = cpuMemory->Read(PC++);
     uint16_t address = (hi << 8) | lo;
     lastAddress = address;
-    return memory->Read(address);
+    return cpuMemory->Read(address);
 }
 
 uint8_t CPU::AddressAbsoluteX(bool checkPage)
 {
     // 6502 is little endian
-    uint16_t lo = memory->Read(PC++);
-    uint16_t hi = memory->Read(PC++);
+    uint16_t lo = cpuMemory->Read(PC++);
+    uint16_t hi = cpuMemory->Read(PC++);
     uint16_t address = (hi << 8) | lo;
     // If the result of Base+Index is greater than $FFFF, wrapping will occur.
     if (checkPage && ((address & 0xFF00) != ((address + X) & 0xFF00)))
@@ -39,14 +62,14 @@ uint8_t CPU::AddressAbsoluteX(bool checkPage)
     }
     address = address + X;
     lastAddress = address;
-    return memory->Read(address);    
+    return cpuMemory->Read(address);    
 }
 
 uint8_t CPU::AddressAbsoluteY(bool checkPage)
 {
     // 6502 is little endian
-    uint16_t lo = memory->Read(PC++);
-    uint16_t hi = memory->Read(PC++);
+    uint16_t lo = cpuMemory->Read(PC++);
+    uint16_t hi = cpuMemory->Read(PC++);
     uint16_t address = (hi << 8) | lo;
     // If the result of Base+Index is greater than $FFFF, wrapping will occur.
     if (checkPage && ((address & 0xFF00) != ((address + Y) & 0xFF00))) 
@@ -56,7 +79,7 @@ uint8_t CPU::AddressAbsoluteY(bool checkPage)
     }
     address = address + Y;
     lastAddress = address;
-    return memory->Read(address);
+    return cpuMemory->Read(address);
 }
 
 uint8_t CPU::AddressAccumulator()
@@ -78,32 +101,32 @@ uint8_t CPU::AddressImplied()
 uint8_t CPU::AddressIndirectX()
 {
     // 6502 is little endian
-    uint16_t baseAddress = memory->Read(PC++);
+    uint16_t baseAddress = cpuMemory->Read(PC++);
     baseAddress = (baseAddress + X) & 0xFF;
-    uint16_t lo = memory->Read(baseAddress);
-    uint16_t hi = memory->Read((baseAddress + 1) & 0xFF);
+    uint16_t lo = cpuMemory->Read(baseAddress);
+    uint16_t hi = cpuMemory->Read((baseAddress + 1) & 0xFF);
     uint16_t address = (hi << 8) | lo;
     lastAddress = address;
-    return memory->Read(address);
+    return cpuMemory->Read(address);
 }
 
 uint8_t CPU::AddressIndirect()
 {
     // 6502 is little endian
-    uint16_t baseAddress = memory->Read(PC++);
-    uint16_t lo = memory->Read(baseAddress);
-    uint16_t hi = memory->Read((baseAddress + 1) & 0xFF);
+    uint16_t baseAddress = cpuMemory->Read(PC++);
+    uint16_t lo = cpuMemory->Read(baseAddress);
+    uint16_t hi = cpuMemory->Read((baseAddress + 1) & 0xFF);
     uint16_t address = (hi << 8) | lo;
     lastAddress = address;
-    return memory->Read(address);
+    return cpuMemory->Read(address);
 }
 
 uint8_t CPU::AddressIndirectY(bool checkPage)
 {
     // 6502 is little endian
-    uint16_t baseAddress = memory->Read(PC++);
-    uint16_t lo = memory->Read(baseAddress);
-    uint16_t hi = memory->Read((baseAddress + 1) & 0xFF);
+    uint16_t baseAddress = cpuMemory->Read(PC++);
+    uint16_t lo = cpuMemory->Read(baseAddress);
+    uint16_t hi = cpuMemory->Read((baseAddress + 1) & 0xFF);
     uint16_t address = (hi << 8) | lo;
     // If Base_Location+Index is greater than $FFFF, wrapping will occur.
     if (checkPage && ((address & 0xFF00) != ((address + Y) & 0xFF00)))
@@ -113,49 +136,66 @@ uint8_t CPU::AddressIndirectY(bool checkPage)
     }
     address = (address + Y);
     lastAddress = address;
-    return memory->Read(address);
+    return cpuMemory->Read(address);
 }
 
 uint8_t CPU::AddressRelative()
 {
-    return memory->Read(PC++);
+    return cpuMemory->Read(PC++);
 }
 
 uint8_t CPU::AddressZeroPage()
 {
-    uint16_t address = memory->Read(PC++);
+    uint16_t address = cpuMemory->Read(PC++);
     address &= 0x00FF;
     lastAddress = address;
-    return memory->Read(address);
+    return cpuMemory->Read(address);
 }
 
 uint8_t CPU::AddressZeroPageX()
 {
-    uint16_t address = memory->Read(PC++);
+    uint16_t address = cpuMemory->Read(PC++);
     address = (address + X) & 0x00FF;
     lastAddress = address;
-    return memory->Read(address);
+    return cpuMemory->Read(address);
 }
 
 uint8_t CPU::AddressZeroPageY()
 {
-    uint16_t address = memory->Read(PC++);
+    uint16_t address = cpuMemory->Read(PC++);
     address = (address + Y) & 0x00FF;
     lastAddress = address;
-    return memory->Read(address);
+    return cpuMemory->Read(address);
 }
 // Memory
 void CPU::StackPush(uint8_t value)
 {
-    memory->Write(0x0100 | SP, value);
+    cpuMemory->Write(0x0100 | SP, value);
     --SP;
 }
 
 uint8_t CPU::StackPull()
 {
     ++SP;
-    return memory->Read(0x0100 | SP);
+    return cpuMemory->Read(0x0100 | SP);
 }
+
+// Interrupt
+void CPU::TriggerNMI()
+{
+    interrupt = InterruptNMI;
+}
+
+void CPU::NMI()
+{
+
+}
+
+void CPU::IRQ()
+{
+
+}
+
 // Opcodes
 void CPU::ADC()
 {
@@ -324,7 +364,7 @@ void CPU::ASL()
             A = result;
             break;
         default:
-            memory->Write(lastAddress, result);
+            cpuMemory->Write(lastAddress, result);
             break;
     }
     cycles += opcodeCycles[currentOpcode];
@@ -532,8 +572,8 @@ void CPU::BRK()
     StackPush(PC & 0xFF);
     StackPush(P.byte | FLAG_BREAK);
     P.bits.I = SET;
-    uint16_t lo = memory->Read(IRQ_VECTOR_LOW);
-    uint16_t hi = memory->Read(IRQ_VECTOR_HIGH);
+    uint16_t lo = cpuMemory->Read(IRQ_VECTOR_LOW);
+    uint16_t hi = cpuMemory->Read(IRQ_VECTOR_HIGH);
     PC = (hi << 8) | lo;
     cycles += opcodeCycles[currentOpcode]; 
 }
@@ -802,7 +842,7 @@ void CPU::DEC()
     uint8_t result = (value - 1) & 0xFF;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (result == 0) ? SET : CLEAR;
-    memory->Write(lastAddress, result);
+    cpuMemory->Write(lastAddress, result);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -925,7 +965,7 @@ void CPU::INC()
     uint8_t result = (value + 1) & 0xFF;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (result == 0) ? SET : CLEAR;
-    memory->Write(lastAddress, result);
+    cpuMemory->Write(lastAddress, result);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -974,8 +1014,8 @@ void CPU::JMP()
      * Absolute      JMP $5597     $4C  3   3
      * Indirect      JMP ($5597)   $6C  3   5
      */
-    uint16_t lo = memory->Read(PC++);
-    uint16_t hi = memory->Read(PC++);
+    uint16_t lo = cpuMemory->Read(PC++);
+    uint16_t hi = cpuMemory->Read(PC++);
     uint16_t address = (hi << 8) | lo;
     switch(opcodeAddressModes[currentOpcode])
     {
@@ -983,8 +1023,8 @@ void CPU::JMP()
             PC = address;
             break;
         case Indirect:
-            lo = memory->Read(address);
-            hi = memory->Read((address + 1) & 0xFF);
+            lo = cpuMemory->Read(address);
+            hi = cpuMemory->Read((address + 1) & 0xFF);
             address = (hi << 8) | lo;
             PC = address;
             break;
@@ -1002,8 +1042,8 @@ void CPU::JSR()
      * MODE           SYNTAX       HEX LEN TIM
      * Absolute      JSR $5597     $20  3   6
      */ 
-    uint16_t lo = memory->Read(PC++);
-    uint16_t hi = memory->Read(PC++);
+    uint16_t lo = cpuMemory->Read(PC++);
+    uint16_t hi = cpuMemory->Read(PC++);
     uint16_t address = (hi << 8) | lo;
     --PC;
     StackPush((PC >> 8) & 0xFF);
@@ -1206,7 +1246,7 @@ void CPU::LSR()
             A = result;
             break;
         default:
-            memory->Write(lastAddress, result);
+            cpuMemory->Write(lastAddress, result);
             break;
     }
     cycles += opcodeCycles[currentOpcode];
@@ -1387,7 +1427,7 @@ void CPU::ROL()
             A = result;
             break;
         default:
-            memory->Write(lastAddress, result);
+            cpuMemory->Write(lastAddress, result);
             break;
     }
     cycles += opcodeCycles[currentOpcode];
@@ -1439,7 +1479,7 @@ void CPU::ROR()
             A = result;
             break;
         default:
-            memory->Write(lastAddress, result);
+            cpuMemory->Write(lastAddress, result);
             break;
     }
     cycles += opcodeCycles[currentOpcode];    
@@ -1642,7 +1682,7 @@ void CPU::STA()
         default:
             assert(0);
     }
-    memory->Write(lastAddress, A);
+    cpuMemory->Write(lastAddress, A);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -1670,7 +1710,7 @@ void CPU::STX()
         default:
             assert(0);
     }
-    memory->Write(lastAddress, X);
+    cpuMemory->Write(lastAddress, X);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -1698,7 +1738,7 @@ void CPU::STY()
         default:
             assert(0);
     }
-    memory->Write(lastAddress, Y);
+    cpuMemory->Write(lastAddress, Y);
     cycles += opcodeCycles[currentOpcode];
 }
 

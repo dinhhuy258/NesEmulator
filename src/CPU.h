@@ -6,33 +6,39 @@
 
 #include "MemoryCPU.h"
 
+enum Interrupt
+{
+    InterruptNone,
+    InterruptNMI, // PPU
+    InterruptIRQ // APU
+};
+
 union ProcessorStatus
 {
     uint8_t byte;
+    /*
+     * 7  bit  0
+     * ---- ----
+     * NV-BDIZC
+     */
     struct BitFlags
     {
         /*
-         * Negative  Flag: Bit 7 of a byte represents the sign of that byte, with 0 being positive and 1 being negative. 
-         * The negative flag (also known as the sign flag) is set if this sign bit is 1
+         * Carry Flag: The carry flag is set if the last instruction resulted in an overflow 
+         * from bit 7 or and underflow from bit 0
+         * For example: performing 255 + 1 would result in an answer of 0 with the carry bit set
          */
-        uint8_t N : 1;
+        uint8_t C : 1;
         /*
-         * Overflow Flag: The overflow flag is set if an invalid two’s complement result was obtained by the previous instruction
-         * This means that a negative result has been obtained when a positive one was expected or vice versa
-         * However 64 + 64 gives the result -128 due to the sign bit. Therefore the overflow flag would be set
-         * The overflow flag is determined by taking the exclusive-or of the carry from between bits 6 and 7 and between bit 7
-         * and the carry flag 
+         * Zero Flag: The zero flag is set if the result of the last instruction was Zero
          */
-        uint8_t V : 1;       
+        uint8_t Z : 1;
         /*
-         * This bit is not used 
+         * Interrupt Disable: The interrupt disable flag can be used to prevent the system responding to IRQs
+         * It is set by the SEI (Set Interrupt Disable) instruction and IRQs will then be ignored until 
+         * execution of a CLI (Clear Interrupt Disable) instruction
          */
-        uint8_t reserved : 1;  
-        /*
-         * Break Command: The break command flag is used to indicate that a BRK (Break) instruction has 
-         * been executed, causing an IRQ
-         */
-        uint8_t B : 1;
+        uint8_t I : 1;
         /*
          * Decimal Mode: The decimal mode flag is used to switch the 6502 into BCD mode
          * However the 2A03 does not support BCD mode so although the flag can be set, its value
@@ -41,21 +47,28 @@ union ProcessorStatus
         */
         uint8_t D : 1;
         /*
-         * Interrupt Disable: The interrupt disable flag can be used to prevent the system responding to IRQs
-         * It is set by the SEI (Set Interrupt Disable) instruction and IRQs will then be ignored until 
-         * execution of a CLI (Clear Interrupt Disable) instruction
+         * Break Command: The break command flag is used to indicate that a BRK (Break) instruction has 
+         * been executed, causing an IRQ
          */
-        uint8_t I : 1;
+        uint8_t B : 1;
         /*
-         * Zero Flag: The zero flag is set if the result of the last instruction was Zero
+         * This bit is not used 
          */
-        uint8_t Z : 1;
+        uint8_t reserved : 1; 
         /*
-         * Carry Flag: The carry flag is set if the last instruction resulted in an overflow 
-         * from bit 7 or and underflow from bit 0
-         * For example: performing 255 + 1 would result in an answer of 0 with the carry bit set
+         * Overflow Flag: The overflow flag is set if an invalid two’s complement result was obtained by the previous instruction
+         * This means that a negative result has been obtained when a positive one was expected or vice versa
+         * However 64 + 64 gives the result -128 due to the sign bit. Therefore the overflow flag would be set
+         * The overflow flag is determined by taking the exclusive-or of the carry from between bits 6 and 7 and between bit 7
+         * and the carry flag 
          */
-        uint8_t C : 1;
+        uint8_t V : 1; 
+        /*
+         * Negative  Flag: Bit 7 of a byte represents the sign of that byte, with 0 being positive and 1 being negative. 
+         * The negative flag (also known as the sign flag) is set if this sign bit is 1
+         */
+        uint8_t N : 1;
+        
     } bits;
 };
 
@@ -79,8 +92,11 @@ enum AddressMode
 
 class CPU
 {
+    friend class PPU;
     public:
-        CPU(Memory *memory);
+        CPU(Memory *cpuMemory);
+        // return the number of cycles CPU
+        uint8_t Step();
 
     private:
         /*
@@ -116,8 +132,10 @@ class CPU
         ProcessorStatus P;
         // Number of cycles
         uint64_t cycles;
+        // Use for suspending CPU (after writting DMA)
+        uint16_t stall; // number of cycles to stall
         // CPU memory
-        Memory *memory;
+        Memory *cpuMemory;
         /*
          * The current opcode that we read from PC
          * We need this value to access the opcodeAddressModes or opcodeCycles in Opcode implementation function
@@ -128,8 +146,7 @@ class CPU
          * Used to write the value back to this address in ASL, LSR, ROL opcode
          */
         uint16_t lastAddress;
-
-    private:
+        Interrupt interrupt;
         // Opcodes table
         std::string opcodeNames[256] = 
         {
@@ -214,46 +231,6 @@ class CPU
             /*Fx*/2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
         };
 
-        uint8_t opcodeTableSize[256] =
-        {
-            1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
-            3, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
-            1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
-            1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 0, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 0, 3, 0, 0,
-            2, 2, 2, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0,
-            2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0,
-        };
-
-        uint8_t opcodeTablePageCycle[256] =
-        {
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0,
-        };
-
     private:
         // Adress mode
         uint8_t AddressAbsolute();
@@ -272,6 +249,11 @@ class CPU
         // Memory
         void StackPush(uint8_t value);  
         uint8_t StackPull();
+        // Interrupt
+        // NMI will be generated by PPU at the start of the VBI
+        void TriggerNMI();
+        void NMI();
+        void IRQ();
         // Opcodes
         void ADC();
         void ALR();

@@ -15,7 +15,7 @@ enum NROM
 {
     NROM128,
     NROM256   
-}
+};
 
 class Mapper0 : public Mapper
 {

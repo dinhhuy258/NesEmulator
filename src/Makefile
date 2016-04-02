@@ -3,7 +3,10 @@ FLAGS=-std=c++0x
 SOURCES=main.cpp \
 		CPU.cpp \
 		MemoryCPU.cpp \
-		Cartridge.cpp
+		PPU.cpp \
+		MemoryPPU.cpp \
+		Cartridge.cpp \
+		Mapper0.cpp 
 BIN=NesEmulator
 
 all: $(SOURCES) $(BIN)

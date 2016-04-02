@@ -1,4 +1,5 @@
 #include "Mapper0.h"
+#include <assert.h>
 
 Mapper0::Mapper0(Cartridge *cartridge) : Mapper(cartridge)
 {
