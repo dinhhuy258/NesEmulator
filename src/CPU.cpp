@@ -7,9 +7,9 @@ CPU::CPU(Memory *cpuMemory)
     A = 0;
     X = 0;
     Y = 0;
-    SP = 0xFF;
-    PC = 0;
-    P.byte = 0x34;
+    SP = 0xFD;
+    PC = 0xC000;
+    P.byte = 0x24;
     cycles = 0;
     stall = 0;
     this->cpuMemory = cpuMemory;
@@ -24,7 +24,7 @@ uint8_t CPU::Step()
         --stall;
         return 1;
     }
-    uint64_t savedCycles = cycles;
+    uint64_t preCycles = cycles;
     switch (interrupt)
     {
         case InterruptNMI:
@@ -34,7 +34,11 @@ uint8_t CPU::Step()
             IRQ();
             break;
     }
-    // Remember implement NMI and IRQ function
+    interrupt = InterruptNone;
+    currentOpcode = cpuMemory->Read(PC++);
+    // Implement this opcode
+    (this->*opcodeFunctions[currentOpcode])();
+    return uint8_t(cycles - preCycles);
 }
 
 // Address mode
@@ -89,7 +93,7 @@ uint8_t CPU::AddressAccumulator()
 
 uint8_t CPU::AddressImmediate()
 {
-    return PC++;
+    return cpuMemory->Read(PC++);
 }
 
 uint8_t CPU::AddressImplied()
@@ -188,12 +192,28 @@ void CPU::TriggerNMI()
 
 void CPU::NMI()
 {
-
+    ++PC;
+    StackPush((PC >> 8) & 0xFF);
+    StackPush(PC & 0xFF);
+    StackPush(P.byte | FLAG_BREAK);
+    P.bits.I = SET;
+    uint16_t lo = cpuMemory->Read(NMI_VECTOR_LOW);
+    uint16_t hi = cpuMemory->Read(NMI_VECTOR_HIGH);
+    PC = (hi << 8) | lo;
+    cycles += 7;
 }
 
 void CPU::IRQ()
 {
-
+    ++PC;
+    StackPush((PC >> 8) & 0xFF);
+    StackPush(PC & 0xFF);
+    StackPush(P.byte | FLAG_BREAK);
+    P.bits.I = SET;
+    uint16_t lo = cpuMemory->Read(IRQ_VECTOR_LOW);
+    uint16_t hi = cpuMemory->Read(IRQ_VECTOR_HIGH);
+    PC = (hi << 8) | lo;
+    cycles += 7;
 }
 
 // Opcodes
@@ -246,8 +266,8 @@ void CPU::ADC()
             assert(0);
     }
     uint16_t result = A + value + P.bits.C;
-    P.bits.V = ((A & 0x80) != (result & 0x80)) ? SET : CLEAR;
-    P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.V = (((A & 0x80) != (result & 0x80)) && ((value & 0x80) != (result & 0x80))) ? SET : CLEAR;
+    P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = ((result & 0xFF) == 0) ? SET : CLEAR;
     P.bits.C = (result > 0xFF) ? SET : CLEAR;
     A = (uint8_t)(result & 0xFF);
@@ -354,7 +374,7 @@ void CPU::ASL()
         default:
             assert(0);
     }
-    P.bits.C = (value & 0x80 == 0x80) ? SET : CLEAR;
+    P.bits.C = ((value & 0x80) == 0x80) ? SET : CLEAR;
     uint8_t result = (value << 1) & 0xFE; // make sure that the lowest bit is equal 0
     P.bits.Z = (result == 0) ? SET : CLEAR;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
@@ -476,8 +496,9 @@ void CPU::BIT()
             assert(0);
     }
     uint8_t result = A & value;
-    P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
-    P.bits.V = ((result & 0x40) == 0x40) ? SET : CLEAR;
+    //NOTE: Refer here http://www.6502.org/tutorials/6502opcodes.html#BIT to know how to implement this opcode
+    P.bits.N = ((value & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.V = ((value & 0x40) == 0x40) ? SET : CLEAR;
     P.bits.Z = (result == 0) ? SET : CLEAR;
     cycles += opcodeCycles[currentOpcode];
 }
@@ -527,7 +548,8 @@ void CPU::BNE()
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
         ++cycles; // Add 1 TIM if a branch occurs
-        PC += offset;
+        //NOTE: BNE bug
+        PC = ((PC + offset) & 0xFF) | (PC & 0xFF00);
     }
     cycles += opcodeCycles[currentOpcode];
 }
@@ -1023,14 +1045,20 @@ void CPU::JMP()
             PC = address;
             break;
         case Indirect:
-            lo = cpuMemory->Read(address);
-            hi = cpuMemory->Read((address + 1) & 0xFF);
-            address = (hi << 8) | lo;
+        {
+            uint16_t low = cpuMemory->Read(address);
+            //NOTE: http://forums.nesdev.com/viewtopic.php?t=6621&start=15
+            ++lo;
+            address = (hi << 8) | (lo & 0xFF);
+            uint16_t high = cpuMemory->Read(address);
+            address = (high << 8) | low;
             PC = address;
             break;
+        }
         default:
             assert(0);
     }
+
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -1062,6 +1090,51 @@ void CPU::LAS()
 
 void CPU::LAX()
 {
+    /*
+     * Load accumulator and X register with memory
+     * Affects Flags: N Z
+     *
+     * MODE        |SYNTAX     |HEX|LEN|TIM
+     * ------------|-----------|---|---|---
+     * Zero Page   |LAX arg    |$A7| 2 | 3
+     * Zero Page,Y |LAX arg,Y  |$B7| 2 | 4
+     * Absolute    |LAX arg    |$AF| 3 | 4
+     * Absolute,Y  |LAX arg,Y  |$BF| 3 | 4+
+     * Indirect,X  |LAX (arg,X)|$A3| 2 | 6
+     * Indirect,Y  |LAX (arg),Y|$B3| 2 | 5+
+     *
+     * + Add 1 cycle if page boundary crossed
+     */
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageY:
+            value = AddressZeroPageY();
+            break;
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteY:
+            value = AddressAbsoluteY(true);
+            break;
+        case IndirectX:
+            value = AddressIndirectX();
+            break;
+        case IndirectY:
+            value = AddressIndirectY(true);
+            break;
+        default:
+            assert(0);
+    }
+    A = value;
+    X = value;
+    P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
+    P.bits.Z = (A == 0) ? SET : CLEAR;
+    cycles += opcodeCycles[currentOpcode];
+
 }
 
 void CPU::LDA()
@@ -1261,8 +1334,31 @@ void CPU::NOP()
      * No OPeration
      * 
      * MODE           SYNTAX       HEX LEN TIM
-     * Implied        NOP           $EA  1   2 
+     * Implied        NOP           $EA  1   2
+     * ... 
      */
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Implied:
+            break;
+        case Immediate:
+            AddressImmediate();
+            break;
+        case ZeroPage:
+            AddressZeroPage();
+            break;
+        case ZeroPageX:
+            AddressZeroPageX();
+            break;
+        case Absolute:
+            AddressAbsolute();
+            break;  
+        case AbsoluteX:
+            AddressAbsoluteX();
+            break; 
+        default:
+            assert(0);
+    }
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -1329,6 +1425,7 @@ void CPU::PHA()
      * MODE           SYNTAX       HEX LEN TIM
      * Implied         PHA         $48  1   3
      */
+    usePHAOpcode = true;
     assert(opcodeAddressModes[currentOpcode] == Implied);
     StackPush(A);
     cycles += opcodeCycles[currentOpcode];
@@ -1342,8 +1439,11 @@ void CPU::PHP()
      * MODE           SYNTAX       HEX LEN TIM
      * Implied         PHP         $08  1   3
      */
+    usePHAOpcode = false;
     assert(opcodeAddressModes[currentOpcode] == Implied);
-    StackPush(P.byte);
+    //NOTE: Refer it http://forums.nesdev.com/viewtopic.php?f=10&t=10049 
+    //they said Both PHP and BRK push the flags with bit 4 true
+    StackPush(P.byte | FLAG_BREAK);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -1374,6 +1474,13 @@ void CPU::PLP()
      */
     assert(opcodeAddressModes[currentOpcode] == Implied);
     P.byte = StackPull();
+    if (usePHAOpcode)
+    {
+        P.bits.B = 0;  
+    }
+    //http://forums.nesdev.com/viewtopic.php?f=3&t=11253
+    //NOTE: Make sure that this bit is always set
+    P.bits.reserved = SET; 
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -1500,6 +1607,8 @@ void CPU::RTI()
      */
     assert(opcodeAddressModes[currentOpcode] == Implied);   
     P.byte = StackPull();
+    //NOTE: Make sure that this bit is always set
+    P.bits.reserved = SET; 
     uint16_t lo = StackPull();
     uint16_t hi = StackPull();
     uint16_t address = (hi << 8) | lo;
@@ -1575,9 +1684,10 @@ void CPU::SBC()
         default:
             assert(0);
     }
-    int16_t result = A - value - (P.bits.C == CLEAR ? 1 : 0);    
-    P.bits.V = ((result > 127) | (result < -128)) ? SET : CLEAR;
-    P.bits.C = (result >= 0) ? CLEAR : SET;
+    int16_t result = A - value - (1 - P.bits.C);   
+    //Note: Refer http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html for more information 
+    P.bits.V = (((A & 0x80) == 0x80) != ((value & 0x80) == 0x80)) ? SET : CLEAR;
+    P.bits.C = (result >= 0) ? SET : CLEAR;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = ((result & 0xFF) == 0) ? SET : CLEAR;
     A = (uint8_t)(result & 0xFF);

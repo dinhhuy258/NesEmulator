@@ -59,8 +59,6 @@ union ProcessorStatus
          * Overflow Flag: The overflow flag is set if an invalid two’s complement result was obtained by the previous instruction
          * This means that a negative result has been obtained when a positive one was expected or vice versa
          * However 64 + 64 gives the result -128 due to the sign bit. Therefore the overflow flag would be set
-         * The overflow flag is determined by taking the exclusive-or of the carry from between bits 6 and 7 and between bit 7
-         * and the carry flag 
          */
         uint8_t V : 1; 
         /*
@@ -99,6 +97,7 @@ class CPU
         uint8_t Step();
 
     private:
+        bool usePHAOpcode;
         /*
          * Accumulator: The accumulator is an 8-bit register which stores the results of arithmetic and logic
          * operations. The accumulator can also be set to a value retrieved from memory
@@ -201,7 +200,7 @@ class CPU
             /*6x*/Implied,    IndirectX,   Implied,     IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Accumulator,   Immediate,   Indirect,    Absolute,    Absolute,    Absolute,
             /*7x*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageX,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteX,   AbsoluteX,
             /*8x*/Immediate,  IndirectX,   Immediate,   IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Implied,       Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
-            /*9x*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageX,   ZeroPageY,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteY,   AbsoluteY,
+            /*9x*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageY,   ZeroPageY,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteY,   AbsoluteY,
             /*Ax*/Immediate,  IndirectX,   Immediate,   IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Implied,       Immediate,   Absolute,    Absolute,    Absolute,    Absolute,
             /*Bx*/Relative,   IndirectY,   Implied,     IndirectY,   ZeroPageX,   ZeroPageX,   ZeroPageY,   ZeroPageY,   Implied,     AbsoluteY,   Implied,       AbsoluteY,   AbsoluteX,   AbsoluteX,   AbsoluteY,   AbsoluteY,
             /*Cx*/Immediate,  IndirectX,   Immediate,   IndirectX,   ZeroPage,    ZeroPage,    ZeroPage,    ZeroPage,    Implied,     Immediate,   Implied,       Immediate,   Absolute,    Absolute,    Absolute,    Absolute,

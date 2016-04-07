@@ -2,19 +2,20 @@
 #define _MEMORY_PPU_H_
 
 #include "Memory.h"
-
 class MemoryPPU : public Memory
 {
     public:
+        void SetMapper(Mapper *mapper);
         uint8_t Read(uint16_t address);
         void Write(uint16_t address, uint8_t value);
 
     private:
-        /*
-         * The PPU memory has a 16-bit address bus and as such could support 64KB of memery with address from 0x0000-0xFFFF
-         * But data address from 0x4000-0xFFFF mirror 0x0000-0x3FFF so I don't implement it here
-         */
-        uint8_t data[16384];
+        // $2000-$2FFF: Nametables
+        uint8_t nametables[0x1000];
+        // $3F00-$3F1F: Patlette
+        uint8_t palette[0x20/*32*/]; 
+
+        uint16_t GetMirrorAddress(uint16_t address);
 };
 
 #endif

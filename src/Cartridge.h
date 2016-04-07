@@ -6,7 +6,7 @@
 
 enum Mirroring 
 { 
-    Horizontal,
+    Horizontal = 0,
     Vertical,
     FourScreen,
     SingleScreen
@@ -67,9 +67,12 @@ class Cartridge
         bool LoadNESFile(std::string fileName);
         uint8_t ReadPRG(uint8_t bank, uint16_t address);
         uint8_t ReadCHR(uint8_t bank, uint16_t address);
-        uint8_t WriteCHR(uint8_t bank, uint16_t address, uint8_t value);
+        void WriteCHR(uint8_t bank, uint16_t address, uint8_t value);
+        uint8_t ReadSRAM(uint16_t address);
+        void WriteSRAM(uint16_t address, uint8_t value);
         uint8_t GetMapperNumber();
         uint8_t GetNumPRG();
+        Mirroring GetMirroring();
     private:
         NESFileHeader header;
         uint8_t **prgRom;
@@ -77,6 +80,7 @@ class Cartridge
         Mirroring mirroring;
         uint8_t mapper;
         bool isCHRRam;
+        uint8_t sram[0x2000];
 };
 
 #endif

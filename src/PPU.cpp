@@ -5,8 +5,8 @@ PPU::PPU(Memory *vram)
 {
     // Refer http://wiki.nesdev.com/w/index.php/PPU_power_up_state for more information
     this->vram = vram;
-    // 241 and 0????
-    scanline = 240;
+    // 241 or 0????
+    scanline = 241;
     cycles = 340;
     controlRegister.byte = 0x00; // ($2000)
     maskRegister.byte = 0x00; // ($2001)

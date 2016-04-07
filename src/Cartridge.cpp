@@ -82,6 +82,7 @@ bool Cartridge::LoadNESFile(std::string fileName)
         LOGI("Can't open NES file");
         return false;
     }
+    return true;
 }
 
 uint8_t Cartridge::ReadPRG(uint8_t bank, uint16_t address)
@@ -94,12 +95,22 @@ uint8_t Cartridge::ReadCHR(uint8_t bank, uint16_t address)
     return chrRomRam[bank][address];
 }
 
-uint8_t Cartridge::WriteCHR(uint8_t bank, uint16_t address, uint8_t value)
+void Cartridge::WriteCHR(uint8_t bank, uint16_t address, uint8_t value)
 {
     if (isCHRRam)
     {
         chrRomRam[bank][address] = value;  
     }
+}
+
+uint8_t Cartridge::ReadSRAM(uint16_t address)
+{
+    return sram[address];
+}
+
+void Cartridge::WriteSRAM(uint16_t address, uint8_t value)
+{
+    sram[address] = value;
 }
 
 uint8_t Cartridge::GetMapperNumber()
@@ -110,4 +121,9 @@ uint8_t Cartridge::GetMapperNumber()
 uint8_t Cartridge::GetNumPRG()
 {
     return header.numPRG;
+}
+
+Mirroring Cartridge::GetMirroring()
+{
+    return mirroring;
 }

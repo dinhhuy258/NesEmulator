@@ -48,7 +48,7 @@ class PPU
         PPU(Memory *vram);
         void WriteRegister(uint16_t address, uint8_t value);
         uint8_t ReadRegister(uint16_t address);
-
+        void Step();
     private:
         // CPU 8266
         CPU *cpu;
@@ -368,7 +368,6 @@ class PPU
         uint8_t GetBackgroundPixel();
         uint8_t GetSpritePixel(uint8_t &index);
         void RenderPixel();
-        void Step();
 };
 
 #endif

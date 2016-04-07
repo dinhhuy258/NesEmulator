@@ -6,6 +6,7 @@ SOURCES=main.cpp \
 		PPU.cpp \
 		MemoryPPU.cpp \
 		Cartridge.cpp \
+		Mapper.cpp \
 		Mapper0.cpp 
 BIN=NesEmulator
 
