@@ -7,7 +7,7 @@ PPU::PPU(Memory *vram)
     this->vram = vram;
     // 241 or 0????
     scanline = 241;
-    cycles = 340;
+    cycles = 0;
     controlRegister.byte = 0x00; // ($2000)
     maskRegister.byte = 0x00; // ($2001)
     statusRegister.byte = 0xA0; // ($2002)

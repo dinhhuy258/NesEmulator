@@ -413,7 +413,7 @@ void CPU::BCC()
     uint8_t offset = AddressRelative();
     if (P.bits.C == CLEAR)
     {
-        if (((PC + offset) & 0xFF00) != PC & 0xFF00)
+        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
         {
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
@@ -438,7 +438,7 @@ void CPU::BCS()
     uint8_t offset = AddressRelative();
     if (P.bits.C == SET)
     {
-        if (((PC + offset) & 0xFF00) != PC & 0xFF00)
+        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
         {
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
@@ -463,7 +463,7 @@ void CPU::BEQ()
     uint8_t offset = AddressRelative();
     if (P.bits.Z == SET)
     {
-        if (((PC + offset) & 0xFF00) != PC & 0xFF00)
+        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
         {
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
@@ -518,7 +518,7 @@ void CPU::BMI()
     uint8_t offset = AddressRelative();
     if (P.bits.N == SET)
     {
-        if (((PC + offset) & 0xFF00) != PC & 0xFF00)
+        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
         {
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
@@ -543,7 +543,7 @@ void CPU::BNE()
     uint8_t offset = AddressRelative();
     if (P.bits.Z == CLEAR)
     {
-        if (((PC + offset) & 0xFF00) != PC & 0xFF00)
+        if (((((PC + offset) & 0xFF) | (PC & 0xFF00)) & 0xFF00) != (PC & 0xFF00))
         {
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
@@ -569,7 +569,7 @@ void CPU::BPL()
     uint8_t offset = AddressRelative();
     if (P.bits.N == CLEAR)
     {
-        if (((PC + offset) & 0xFF00) != PC & 0xFF00)
+        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
         {
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
@@ -615,7 +615,7 @@ void CPU::BVC()
     uint8_t offset = AddressRelative();
     if (P.bits.V == CLEAR)
     {
-        if (((PC + offset) & 0xFF00) != PC & 0xFF00)
+        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
         {
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
@@ -640,7 +640,7 @@ void CPU::BVS()
     uint8_t offset = AddressRelative();
     if (P.bits.V == SET)
     {
-        if (((PC + offset) & 0xFF00) != PC & 0xFF00)
+        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
         {
             ++cycles; // Add 1 TIM if the destination address is on a different page
         }
@@ -1457,7 +1457,7 @@ void CPU::NOP()
             AddressAbsolute();
             break;  
         case AbsoluteX:
-            AddressAbsoluteX();
+            AddressAbsoluteX(true);
             break; 
         default:
             assert(0);

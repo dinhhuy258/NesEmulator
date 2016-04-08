@@ -82,7 +82,18 @@ int main()
             LOGI("%d", count);
             getch();
         } 
-             
+        if (SL == -1)
+        {
+            SL = 261;
+        }
+        if (ppu->cycles != CYC || ppu->scanline != SL)   
+        {
+            LOGI("=======================================================");
+            LOGI("CYC: %d SL: %d", ppu->cycles, ppu->scanline);
+            LOGI("CYC: %d SL: %d", CYC, SL);
+            LOGI("%d", count);
+            getch();    
+        }
         uint8_t cpuCycles = cpu->Step();
         uint8_t ppuCycles = cpuCycles * 3;
         for (uint8_t i = 0; i < ppuCycles; ++i)
