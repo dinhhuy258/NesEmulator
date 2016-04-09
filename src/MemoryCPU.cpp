@@ -15,12 +15,27 @@ uint8_t MemoryCPU::Read(uint16_t address)
     else if (address < 0x2008)
     {
         // 0x2000-0x2007: I/O Register (PPU)
-        value = ppu->ReadRegister(address);
+        switch(address)
+        {
+            case 0x2002:
+            case 0x2004:
+            case 0x2007:
+                value = ppu->ReadRegister(address);
+                break;
+        }
+        
     }
     else if (address < 0x4000)
     {
         // 0x2008-0x3FFF mirrors 0x2000-0x2007
-        value = ppu->ReadRegister(address & 0x2007);
+        switch(address & 0x2007)
+        {
+            case 0x2002:
+            case 0x2004:
+            case 0x2007:
+                value = ppu->ReadRegister(address & 0x2007);
+                break;
+        }
     }
     else if (address < 0x4020)
     {
@@ -48,16 +63,28 @@ void MemoryCPU::Write(uint16_t address, uint8_t value)
     else if (address < 0x2008)
     {
         // 0x2000-0x2007: I/O Register (PPU)
+        if (address == 0x2002)
+        {
+            return;
+        }
         ppu->WriteRegister(address, value);
     }
     else if (address < 0x4000)
     {
         // 0x2008-0x3FFF mirrors 0x2000-0x2007
+        if ((address & 0x2007) == 0x2002)
+        {
+            return;
+        }
         ppu->WriteRegister(address & 0x2007, value);
     }
     else if (address < 0x4020)
     {
         // 0x4000-0x401F: I/O Register (APU, Joypad)
+        if (address == 0x4014)
+        {
+            ppu->WriteRegister(address, value);  
+        }
     }
     else
     {

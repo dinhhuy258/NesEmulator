@@ -1211,6 +1211,9 @@ void CPU::LAX()
     uint8_t value;
     switch(opcodeAddressModes[currentOpcode])
     {
+        case Immediate:
+            value = AddressImmediate();
+            break;
         case ZeroPage:
             value = AddressZeroPage();
             break;

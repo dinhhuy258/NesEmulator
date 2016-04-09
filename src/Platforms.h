@@ -1,6 +1,12 @@
 #ifndef _PLATFORMS_H_
 #define _PLATFORMS_H_
 
+// NES
+#define NES_FILE "../rom/nestest.nes"
+#define CPU_FREQUENCY 1789773
+// Display
+#define SCREEN_WIDTH 256
+#define SCREEN_HEIGHT 240
 // Bit
 #define SET 1
 #define CLEAR 0

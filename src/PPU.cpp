@@ -1,5 +1,6 @@
 #include "PPU.h"
 #include <assert.h>
+#include "Platforms.h"
 
 PPU::PPU(Memory *vram)
 {
@@ -17,6 +18,18 @@ PPU::PPU(Memory *vram)
     currentVRAMAddress.value = 0; // ($2005-$2006)
     internalBuffer = 0;
     oddFrame = false;
+    for(int y = 0; y < SCREEN_HEIGHT; ++y)  
+    {
+        for(int x = 0; x < SCREEN_WIDTH; ++x)
+        {
+            paletteIndex[y][x] = 0;
+        }
+    }
+}
+
+void PPU::SetCPU(CPU *cpu)
+{
+    this->cpu = cpu;
 }
 
 void PPU::WriteRegister(uint16_t address, uint8_t value)
@@ -69,6 +82,7 @@ uint8_t PPU::ReadRegister(uint16_t address)
             result = ReadData(); 
             break;
         default:
+            LOGI("%x", address);
             assert(0);
     }
     return result;
@@ -559,7 +573,8 @@ void PPU::RenderPixel()
             statusRegister.bits.sprite0Hit = 1;
         }
     }
-    // Display palette[color] on the screen
+    paletteIndex[scanline][cycles - 1] = vram->Read(color | 0x3F00);
+    LOGI("Color: %x", color);
 }
 
 void PPU::Step()
@@ -664,6 +679,7 @@ void PPU::Step()
             }
         }
     }
+
     if (scanline == 241 && cycles == 1)
     {
         // Set VB flag

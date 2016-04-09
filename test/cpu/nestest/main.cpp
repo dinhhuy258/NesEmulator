@@ -51,6 +51,7 @@ int main()
     memoryCPU->SetMapper(mapper);
     memoryCPU->SetPPU(ppu);
     CPU *cpu = new CPU(memoryCPU);
+    ppu->SetCPU(cpu);
     cpu->PC = 0xC000;
     uint32_t count = 0;
     unsigned int A, X, Y, P, SP, CYC, SL, PC;

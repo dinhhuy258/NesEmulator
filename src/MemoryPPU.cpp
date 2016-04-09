@@ -21,12 +21,30 @@ uint8_t MemoryPPU::Read(uint16_t address)
     else if (address < 0x3F20)
     {
         //$3F00-$3F1F: Patlette
-        value = palette[address - 0x3F00];
+        /*
+         * Mirroring is used so that every four bytes in the palettes is a copy of $3F00
+         * Therefore $3F04, $3F08,$3F0C, $3F10, $3F14, $3F18 and $3F1C are just copies of $3F00
+         */
+        if (address % 4 == 0)
+        {
+            value = palette[0x3F00 - 0x3F00];    
+        }
+        else
+        {
+            value = palette[address - 0x3F00];
+        }
     }
     else if (address < 0x4000)
     {
         //$3F20-$3FFF: Mirrors $3F00-$3F1F
-        value = palette[(address & 0x3F1F) - 0x3F00];
+        if ((address & 0x3F1F) % 4 == 0)
+        {
+            value = palette[0x3F00 - 0x3F00];    
+        }
+        else
+        {
+            value = palette[(address & 0x3F1F) - 0x3F00];
+        }
     }
     else
     {
@@ -56,12 +74,30 @@ void MemoryPPU::Write(uint16_t address, uint8_t value)
     else if (address < 0x3F20)
     {
         //$3F00-$3F1F: Patlette
-        palette[address - 0x3F00] = value;
+        /*
+         * Mirroring is used so that every four bytes in the palettes is a copy of $3F00
+         * Therefore $3F04, $3F08,$3F0C, $3F10, $3F14, $3F18 and $3F1C are just copies of $3F00
+         */
+        if (address % 4 == 0)
+        {
+            palette[0x3F00 - 0x3F00] = value;    
+        }
+        else
+        {
+            palette[address - 0x3F00] = value;
+        }
     }
     else if (address < 0x4000)
     {
         //$3F20-$3FFF: Mirrors $3F00-$3F1F
-        palette[(address & 0x3F1F) - 0x3F00] = value;
+        if ((address & 0x3F1F) % 4 == 0)
+        {
+            palette[0x3F00 - 0x3F00] = value;    
+        }
+        else
+        {
+            palette[(address & 0x3F1F) - 0x3F00] = value;
+        }
     }
     else
     {

@@ -3,6 +3,7 @@
 
 #include "CPU.h"
 #include "MemoryPPU.h"
+#include "Platforms.h"
 
 struct Sprite
 {
@@ -46,9 +47,12 @@ class PPU
 {
     public:
         PPU(Memory *vram);
+        void SetCPU(CPU *cpu);
         void WriteRegister(uint16_t address, uint8_t value);
         uint8_t ReadRegister(uint16_t address);
         void Step();
+        uint8_t paletteIndex[SCREEN_HEIGHT][SCREEN_WIDTH];
+        
     private:
         // CPU 8266
         CPU *cpu;

@@ -1,5 +1,6 @@
 CC=g++
-FLAGS=-std=c++0x
+FLAGS=-std=c++0x -lGL -lGLU -lglut
+FLAGS_DEBUG=-std=c++0x -lGL -lGLU -lglut -g
 SOURCES=main.cpp \
 		CPU.cpp \
 		MemoryCPU.cpp \
@@ -13,10 +14,13 @@ BIN=NesEmulator
 all: $(SOURCES) $(BIN)
 
 $(BIN): $(SOURCES)
-	$(CC) $(FLAGS) $(SOURCES) -o $@
+	$(CC) $(SOURCES) -o $@ $(FLAGS)
 
 run:
 	./$(BIN)
 
 clean:
-	rm -f *.o $(BIN) *.h~ *.cpp~
+	rm -f *.o $(BIN) *.h~ *.cpp~ *.out
+
+debug: 
+	$(CC) $(SOURCES) $(FLAGS_DEBUG)
