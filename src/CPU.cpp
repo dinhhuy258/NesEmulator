@@ -2,18 +2,43 @@
 #include <assert.h>
 #include "Platforms.h"
 
+#include <termios.h>
+#include <unistd.h>
+
+int _getch(void)
+{
+    struct termios oldattr, newattr;
+    int ch;
+    tcgetattr( STDIN_FILENO, &oldattr );
+    newattr = oldattr;
+    newattr.c_lflag &= ~( ICANON | ECHO );
+    tcsetattr( STDIN_FILENO, TCSANOW, &newattr );
+    ch = getchar();
+    tcsetattr( STDIN_FILENO, TCSANOW, &oldattr );
+    return ch;
+}
+
 CPU::CPU(Memory *cpuMemory)
 {
     A = 0;
     X = 0;
     Y = 0;
-    SP = 0xFD;
-    PC = 0xC000;
+    SP = 0xFF;
+    PC = 0xC004;
     P.byte = 0x24;
     cycles = 0;
     stall = 0;
     this->cpuMemory = cpuMemory;
     interrupt = InterruptNone;
+
+    writeLog = 0;
+
+    // StackPush(0xFF);
+    // StackPush(0xFF);
+    // StackPush(0x00);
+    // StackPush(0x02);
+    // StackPush(0x30);
+    // PC = 0x8000;
 }
 
 uint8_t CPU::Step()
@@ -28,6 +53,7 @@ uint8_t CPU::Step()
     switch (interrupt)
     {
         case InterruptNMI:
+            //LOGI("NMI");
             NMI();
             break;
         case InterruptIRQ:
@@ -35,7 +61,35 @@ uint8_t CPU::Step()
             break;
     }
     interrupt = InterruptNone;
-    currentOpcode = cpuMemory->Read(PC++);
+    static bool printLog = false;
+    if (PC == 0xC054)
+    {
+        int i = 0;
+
+        //printLog = true;
+    }
+    if (PC == 0xC04C)
+    {
+        int i = 0;
+        printLog = true;
+    } 
+    if (PC == 0xC291)
+    {
+        ++writeLog;
+    }
+    if (PC == 0xC2D3)
+    {
+        int i = 0;
+
+        //printLog = true;
+    }  
+       
+    currentOpcode = cpuMemory->Read(PC++); 
+    if (printLog)
+    {
+        //LOGI("PC: %x A: %x X: %x Y: %x", PC - 1, A, X, Y);    
+       // LOGI("PC: %x - Opcode: %s", PC - 1, opcodeNames[currentOpcode].c_str());    
+    }
     // Implement this opcode
     (this->*opcodeFunctions[currentOpcode])();
     return uint8_t(cycles - preCycles);
@@ -171,6 +225,80 @@ uint8_t CPU::AddressZeroPageY()
     lastAddress = address;
     return cpuMemory->Read(address);
 }
+
+// Write
+
+void CPU::WriteAddressAbsolute(uint8_t value)
+{
+    // 6502 is little endian
+    uint16_t lo = cpuMemory->Read(PC++);
+    uint16_t hi = cpuMemory->Read(PC++);
+    uint16_t address = (hi << 8) | lo;
+    cpuMemory->Write(address, value);
+}
+
+void CPU::WriteAddressAbsoluteX(uint8_t value)
+{
+    // 6502 is little endian
+    uint16_t lo = cpuMemory->Read(PC++);
+    uint16_t hi = cpuMemory->Read(PC++);
+    uint16_t address = (hi << 8) | lo;
+    address = address + X;
+    cpuMemory->Write(address, value);    
+}
+
+void CPU::WriteAddressAbsoluteY(uint8_t value)
+{
+    // 6502 is little endian
+    uint16_t lo = cpuMemory->Read(PC++);
+    uint16_t hi = cpuMemory->Read(PC++);
+    uint16_t address = (hi << 8) | lo;
+    address = address + Y;
+    cpuMemory->Write(address, value);
+}
+
+void CPU::WriteAddressIndirectX(uint8_t value)
+{
+    // 6502 is little endian
+    uint16_t baseAddress = cpuMemory->Read(PC++);
+    baseAddress = (baseAddress + X) & 0xFF;
+    uint16_t lo = cpuMemory->Read(baseAddress);
+    uint16_t hi = cpuMemory->Read((baseAddress + 1) & 0xFF);
+    uint16_t address = (hi << 8) | lo;
+    cpuMemory->Write(address, value);
+}
+
+void CPU::WriteAddressIndirectY(uint8_t value)
+{
+    // 6502 is little endian
+    uint16_t baseAddress = cpuMemory->Read(PC++);
+    uint16_t lo = cpuMemory->Read(baseAddress);
+    uint16_t hi = cpuMemory->Read((baseAddress + 1) & 0xFF);
+    uint16_t address = (hi << 8) | lo;
+    address = (address + Y);
+    cpuMemory->Write(address, value);
+}
+
+void CPU::WriteAddressZeroPage(uint8_t value)
+{
+    uint16_t address = cpuMemory->Read(PC++);
+    address &= 0x00FF;
+    cpuMemory->Write(address, value);
+}
+
+void CPU::WriteAddressZeroPageX(uint8_t value)
+{
+    uint16_t address = cpuMemory->Read(PC++);
+    address = (address + X) & 0x00FF;
+    cpuMemory->Write(address, value);
+}
+
+void CPU::WriteAddressZeroPageY(uint8_t value)
+{
+    uint16_t address = cpuMemory->Read(PC++);
+    address = (address + Y) & 0x00FF;
+    cpuMemory->Write(address, value);
+}
 // Memory
 void CPU::StackPush(uint8_t value)
 {
@@ -214,6 +342,27 @@ void CPU::IRQ()
     uint16_t hi = cpuMemory->Read(IRQ_VECTOR_HIGH);
     PC = (hi << 8) | lo;
     cycles += 7;
+}
+// Helper functions
+void CPU::Branch(uint8_t offset)
+{
+    uint16_t result;        
+    if ((offset & 0x80) == 0x80) 
+    {
+        // If offset is signed number => backward jump
+        offset = ~offset + 1;
+        result = PC - offset;
+    }
+    else
+    {
+        result = PC + offset;
+    }
+    if ((result & 0xFF00) != (PC & 0xFF00))
+    {
+        ++cycles; // Add 1 TIM if the destination address is on a different page   
+    }
+    ++cycles; // Add 1 TIM if a branch occurs
+    PC = result;        
 }
 
 // Opcodes
@@ -413,12 +562,7 @@ void CPU::BCC()
     uint8_t offset = AddressRelative();
     if (P.bits.C == CLEAR)
     {
-        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
-        {
-            ++cycles; // Add 1 TIM if the destination address is on a different page
-        }
-        ++cycles; // Add 1 TIM if a branch occurs
-        PC += offset;
+        Branch(offset);
     }
     cycles += opcodeCycles[currentOpcode];
 }
@@ -438,12 +582,7 @@ void CPU::BCS()
     uint8_t offset = AddressRelative();
     if (P.bits.C == SET)
     {
-        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
-        {
-            ++cycles; // Add 1 TIM if the destination address is on a different page
-        }
-        ++cycles; // Add 1 TIM if a branch occurs
-        PC += offset;
+        Branch(offset);
     }
     cycles += opcodeCycles[currentOpcode];
 }
@@ -463,12 +602,7 @@ void CPU::BEQ()
     uint8_t offset = AddressRelative();
     if (P.bits.Z == SET)
     {
-        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
-        {
-            ++cycles; // Add 1 TIM if the destination address is on a different page
-        }
-        ++cycles; // Add 1 TIM if a branch occurs
-        PC += offset;
+        Branch(offset);
     }
     cycles += opcodeCycles[currentOpcode];
 }
@@ -518,12 +652,7 @@ void CPU::BMI()
     uint8_t offset = AddressRelative();
     if (P.bits.N == SET)
     {
-        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
-        {
-            ++cycles; // Add 1 TIM if the destination address is on a different page
-        }
-        ++cycles; // Add 1 TIM if a branch occurs
-        PC += offset;
+        Branch(offset);
     }
     cycles += opcodeCycles[currentOpcode];
 }
@@ -543,13 +672,7 @@ void CPU::BNE()
     uint8_t offset = AddressRelative();
     if (P.bits.Z == CLEAR)
     {
-        if (((((PC + offset) & 0xFF) | (PC & 0xFF00)) & 0xFF00) != (PC & 0xFF00))
-        {
-            ++cycles; // Add 1 TIM if the destination address is on a different page
-        }
-        ++cycles; // Add 1 TIM if a branch occurs
-        //NOTE: BNE bug
-        PC = ((PC + offset) & 0xFF) | (PC & 0xFF00);
+        Branch(offset);    
     }
     cycles += opcodeCycles[currentOpcode];
 }
@@ -569,12 +692,7 @@ void CPU::BPL()
     uint8_t offset = AddressRelative();
     if (P.bits.N == CLEAR)
     {
-        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
-        {
-            ++cycles; // Add 1 TIM if the destination address is on a different page
-        }
-        ++cycles; // Add 1 TIM if a branch occurs
-        PC += offset;
+        Branch(offset);
     }
     cycles += opcodeCycles[currentOpcode]; 
 }
@@ -615,12 +733,7 @@ void CPU::BVC()
     uint8_t offset = AddressRelative();
     if (P.bits.V == CLEAR)
     {
-        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
-        {
-            ++cycles; // Add 1 TIM if the destination address is on a different page
-        }
-        ++cycles; // Add 1 TIM if a branch occurs
-        PC += offset;
+        Branch(offset);
     }
     cycles += opcodeCycles[currentOpcode]; 
 }
@@ -640,12 +753,7 @@ void CPU::BVS()
     uint8_t offset = AddressRelative();
     if (P.bits.V == SET)
     {
-        if (((PC + offset) & 0xFF00) != (PC & 0xFF00))
-        {
-            ++cycles; // Add 1 TIM if the destination address is on a different page
-        }
-        ++cycles; // Add 1 TIM if a branch occurs
-        PC += offset;
+        Branch(offset);
     }
     cycles += opcodeCycles[currentOpcode];   
 }
@@ -1855,25 +1963,24 @@ void CPU::SAX()
      * Indirect,X  |SAX (arg,X)|$83| 2 | 6
      * Absolute    |SAX arg    |$8F| 3 | 4
      */
+    uint8_t result = X & A;
     switch(opcodeAddressModes[currentOpcode])
     {
         case ZeroPage:
-            AddressZeroPage(); // get lastAddress
+            WriteAddressZeroPage(result);
             break;
         case ZeroPageY:
-            AddressZeroPageY(); // get lastAddress
+            WriteAddressZeroPageY(result); 
             break;
         case IndirectX:
-            AddressIndirectX(); // get lastAddress
+            WriteAddressIndirectX(result); 
             break;
         case Absolute:
-            AddressAbsolute(); // get lastAddress
+            WriteAddressAbsolute(result); 
             break;
         default:
             assert(0);
     }
-    uint8_t result = X & A;
-    cpuMemory->Write(lastAddress, result);
     cycles += opcodeCycles[currentOpcode];
 
 }
@@ -2105,33 +2212,33 @@ void CPU::STA()
      * Indirect,X    STA ($44,X)   $81  2   6
      * Indirect,Y    STA ($44),Y   $91  2   6
      */
+
     switch(opcodeAddressModes[currentOpcode])
     {
         case ZeroPage:
-            AddressZeroPage(); // get lastAddress
+            WriteAddressZeroPage(A); 
             break;
         case ZeroPageX:
-            AddressZeroPageX(); // get lastAddress
+            WriteAddressZeroPageX(A); 
             break;
         case Absolute:
-            AddressAbsolute(); // get lastAddress
+            WriteAddressAbsolute(A); 
             break;
         case AbsoluteX:
-            AddressAbsoluteX(); // get lastAddress
+            WriteAddressAbsoluteX(A); 
             break;
         case AbsoluteY:
-            AddressAbsoluteY(); // get lastAddress
+            WriteAddressAbsoluteY(A); 
             break;
         case IndirectX:
-            AddressIndirectX(); // get lastAddress
+            WriteAddressIndirectX(A); 
             break;
         case IndirectY:
-            AddressIndirectY(); // get lastAddress
+            WriteAddressIndirectY(A); 
             break;
         default:
             assert(0);
     }
-    cpuMemory->Write(lastAddress, A);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -2148,18 +2255,17 @@ void CPU::STX()
     switch(opcodeAddressModes[currentOpcode])
     {
         case ZeroPage:
-            AddressZeroPage(); // get lastAddress
+            WriteAddressZeroPage(X); 
             break;
         case ZeroPageY:
-            AddressZeroPageY(); // get lastAddress
+            WriteAddressZeroPageY(X); 
             break;
         case Absolute:
-            AddressAbsolute(); // get lastAddress
+            WriteAddressAbsolute(X);
             break;
         default:
             assert(0);
     }
-    cpuMemory->Write(lastAddress, X);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -2176,18 +2282,17 @@ void CPU::STY()
     switch(opcodeAddressModes[currentOpcode])
     {
         case ZeroPage:
-            AddressZeroPage(); // get lastAddress
+            WriteAddressZeroPage(Y); 
             break;
         case ZeroPageX:
-            AddressZeroPageX(); // get lastAddress
+            WriteAddressZeroPageX(Y); 
             break;
         case Absolute:
-            AddressAbsolute(); // get lastAddress
+            WriteAddressAbsolute(Y); 
             break;
         default:
             assert(0);
     }
-    cpuMemory->Write(lastAddress, Y);
     cycles += opcodeCycles[currentOpcode];
 }
 

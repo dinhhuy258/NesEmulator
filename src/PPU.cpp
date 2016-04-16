@@ -99,6 +99,7 @@ void PPU::WriteControl(uint8_t value)
 // 0x2001
 void PPU::WriteMask(uint8_t value)
 {
+   // LOGI("Write: %x", value);
     maskRegister.byte = value;
 }
 
@@ -167,13 +168,22 @@ void PPU::WriteAddress(uint8_t value)
         // v                   = t
         currentVRAMAddress.value = temporaryVRAMAddress.value;
         // w:                  = 0
-        toggle = 0;
+        toggle = 0;     
+        // if (currentVRAMAddress.value == 0x3F00)
+        // {
+        //  //   writeLog = true;
+        //     //for(int a = 0; a < 100; ++a)
+        //     LOGI("==================================================");
+        //     LOGI("%x", currentVRAMAddress.value);
+        // }
     }   
 }
 
 // 0x2007
 void PPU::WriteData(uint8_t value)
 {
+    // if(writeLog)
+    // LOGI("Address: %x - Value: %x", currentVRAMAddress.value, value);
     vram->Write(currentVRAMAddress.value, value);
     currentVRAMAddress.value = 
     (controlRegister.bits.addressIncrement == 1) ? currentVRAMAddress.value  + 32
@@ -185,7 +195,7 @@ void PPU::WriteDMA(uint8_t value)
 {
     uint16_t address = uint16_t(value) << 8;
     // Writing $XX will upload 256 bytes of data from CPU page $XX00-$XXFF to the internal PPU OAM
-    for (uint8_t i = 0; i < 256; ++i)
+    for (uint16_t i = 0; i < 256; ++i)
     {
         primaryOAM[oamAddress++] = cpu->cpuMemory->Read(address + i);
     }
@@ -218,6 +228,8 @@ uint8_t PPU::ReadOAMData()
 // 0x2007
 uint8_t PPU::ReadData()
 {
+    // if(writeLog)
+    //     LOGI("Read data");
     /*
      * When reading while the VRAM address is in the range 0-$3EFF (i.e., before the palettes),  the read will return the contents of an 
      * internal read buffer. This internal buffer is updated only when reading PPUDATA, and so is preserved across frames
@@ -280,25 +292,51 @@ void PPU::YIncrement()
     if (currentVRAMAddress.bits.fineYScroll == 7)
     {
         currentVRAMAddress.bits.fineYScroll = 0;
-        if (currentVRAMAddress.bits.coarseYScroll == 29)
+        uint8_t y = (currentVRAMAddress.value & 0x03E0) >> 5;
+        if (y == 29)
         {
-            currentVRAMAddress.bits.coarseYScroll = 0;
+            y = 0;
             // Switch vertical nametable
             currentVRAMAddress.bits.nametableSelect ^= 2; 
         }
-        else if (currentVRAMAddress.bits.coarseYScroll == 31)
+        else if (y == 31)
         {
-            currentVRAMAddress.bits.coarseYScroll = 0;
+            y = 0;
         }
         else
         {
-            ++currentVRAMAddress.bits.coarseYScroll;
+            ++y;
+            
         }
+        currentVRAMAddress.value = (currentVRAMAddress.value & 0xFC1F) | (y << 5);
     }
     else
     {
         ++currentVRAMAddress.bits.fineYScroll;    
     }
+    // if (currentVRAMAddress.bits.fineYScroll == 7)
+    // {
+    //     currentVRAMAddress.bits.fineYScroll = 0;
+    //     if (currentVRAMAddress.bits.coarseYScroll == 29)
+    //     {
+    //         currentVRAMAddress.bits.coarseYScroll = 0;
+    //         // Switch vertical nametable
+    //         currentVRAMAddress.bits.nametableSelect ^= 2; 
+    //     }
+    //     else if (currentVRAMAddress.bits.coarseYScroll == 31)
+    //     {
+    //         currentVRAMAddress.bits.coarseYScroll = 0;
+    //     }
+    //     else
+    //     {
+    //         ++currentVRAMAddress.bits.coarseYScroll;
+    //         //currentVRAMAddress.value = (currentVRAMAddress.value & 0xFC1F) | (y << 5)
+    //     }
+    // }
+    // else
+    // {
+    //     ++currentVRAMAddress.bits.fineYScroll;    
+    // }
 }
 
 void PPU::CopyHorizontal()
@@ -343,6 +381,9 @@ void PPU::FetchTileLow()
      */
     uint16_t address = 0x1000 * controlRegister.bits.backgroundPatternTableAddress + tile.nametableByte * 16 + currentVRAMAddress.bits.fineYScroll;
     tile.tileLow = vram->Read(address);
+    // LOGI("Fetch low");
+    // if (writeLog)
+    //     LOGI("Tile low: %x", tile.tileLow);
 }
 
 void PPU::FetchTileHigh()
@@ -356,7 +397,10 @@ void PPU::FetchTileHigh()
      * After getting the address of patterntable we plus it with fineYScroll to get the byte that we want to display on the current scanline
      */
     uint16_t address = 0x1000 * controlRegister.bits.backgroundPatternTableAddress + tile.nametableByte * 16 + currentVRAMAddress.bits.fineYScroll;
-    tile.tileHigh = vram->Read(address + 8); 
+    tile.tileHigh = vram->Read(address + 8);
+    // LOGI("Fetch high");
+    // if (writeLog)
+    //     LOGI("Tile high: %x", tile.tileHigh); 
 }
 
 void PPU::StorePaletteIndices()
@@ -368,6 +412,9 @@ void PPU::StorePaletteIndices()
      * |++--- Palette number from attribute table or OAM
      * +----- Background/Sprite select (0: background 1: sprite)
      */
+    //LOGI("Store");
+    // if (writeLog)
+    //     LOGI("Fine y: %x", tile.tileHigh); 
     uint32_t data = 0x00000000;
     for (uint8_t i = 0; i < 8; ++i)
     {
@@ -574,7 +621,7 @@ void PPU::RenderPixel()
         }
     }
     paletteIndex[scanline][cycles - 1] = vram->Read(color | 0x3F00);
-    LOGI("Color: %x", color);
+    //LOGI("%x", color);
 }
 
 void PPU::Step()
@@ -606,7 +653,7 @@ void PPU::Step()
     }
 
     bool preRenderScanline = (scanline == 261);
-    bool visibleScanline = (scanline <= 239);
+    bool visibleScanline = (scanline >= 1 && scanline <= 239);
     bool postRenderScanline = (scanline == 240);
     bool VBScanline = (scanline >= 241 && scanline <= 260);
 
@@ -627,12 +674,21 @@ void PPU::Step()
          * for more information
          */
         // Background
+        //if (scanline == 0 && )
         if ((preRenderScanline || visibleScanline) && fetchCycle)
         {
             tile.paletteIndices  <<= 4;
-            switch(cycles & 8)
+            switch(cycles % 8)
             {
                 case 1:
+                    // if (cycles >= 321 && cycles <= 336)
+                    // {
+                    //     LOGI("Prefetch");
+                    // }
+                    // if (cycles >= 249 && cycles <= 256)
+                    // {
+                    //     LOGI("Unused");
+                    // }
                     FetchNametable();
                     break;
                 case 3:
@@ -652,7 +708,9 @@ void PPU::Step()
                     }   
                     else
                     {
+                        //LOGI("Y increment");
                         YIncrement();
+                        //LOGI("After Y increment: %x", 0x2000 | (currentVRAMAddress.value & 0xFFF));
                     }                
                     break;
             }
@@ -679,13 +737,21 @@ void PPU::Step()
             }
         }
     }
+    /* 
+     * This value is important, in doc's, they say that VBLANK is happens in SL 241
+     * but in real test (nestest.nes) it will load pattele correctly from 0x3F00-0x3F1F
+     * However i test it with value 248 is verygood
+     * Remember that the PPU returns VBLANK in SL 241 in the status register
+     */
 
-    if (scanline == 241 && cycles == 1)
+    if (scanline == 248 && cycles == 1)
     {
         // Set VB flag
         statusRegister.bits.vblank = 1;
         // Call NMI interrup
-        cpu->TriggerNMI();
+        #ifndef _DEBUG_
+            cpu->TriggerNMI();
+        #endif
     } 
     if (preRenderScanline && cycles == 1)
     {

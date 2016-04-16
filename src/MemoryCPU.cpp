@@ -1,5 +1,6 @@
 #include "MemoryCPU.h"
 #include "PPU.h"
+#include "Platforms.h"
 uint8_t MemoryCPU::Read(uint16_t address)
 {
     uint8_t value = 0;
@@ -40,6 +41,10 @@ uint8_t MemoryCPU::Read(uint16_t address)
     else if (address < 0x4020)
     {
         // 0x4000-0x401F: I/O Register (APU, Joypad)
+        if (address == 0x4016) // Controller1
+        {
+            value = controller->Read();
+        }
     }
     else
     {
@@ -81,8 +86,12 @@ void MemoryCPU::Write(uint16_t address, uint8_t value)
     else if (address < 0x4020)
     {
         // 0x4000-0x401F: I/O Register (APU, Joypad)
-        if (address == 0x4014)
+        if (address == 0x4016) // Controller1
         {
+            controller->Write(value);
+        }
+        else if (address == 0x4014) //PPU DMA
+        {    
             ppu->WriteRegister(address, value);  
         }
     }

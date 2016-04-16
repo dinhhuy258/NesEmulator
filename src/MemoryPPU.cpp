@@ -1,4 +1,5 @@
 #include "MemoryPPU.h"
+#include "Platforms.h"
 
 uint8_t MemoryPPU::Read(uint16_t address)
 {
@@ -80,7 +81,10 @@ void MemoryPPU::Write(uint16_t address, uint8_t value)
          */
         if (address % 4 == 0)
         {
-            palette[0x3F00 - 0x3F00] = value;    
+            if (address == 0x3F00)
+            {
+                palette[0x3F00 - 0x3F00] = value;    
+            }
         }
         else
         {
@@ -92,7 +96,7 @@ void MemoryPPU::Write(uint16_t address, uint8_t value)
         //$3F20-$3FFF: Mirrors $3F00-$3F1F
         if ((address & 0x3F1F) % 4 == 0)
         {
-            palette[0x3F00 - 0x3F00] = value;    
+            //palette[0x3F00 - 0x3F00] = value;    
         }
         else
         {

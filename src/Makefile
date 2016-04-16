@@ -8,7 +8,8 @@ SOURCES=main.cpp \
 		MemoryPPU.cpp \
 		Cartridge.cpp \
 		Mapper.cpp \
-		Mapper0.cpp 
+		Mapper0.cpp \
+		Controller.cpp
 BIN=NesEmulator
 
 all: $(SOURCES) $(BIN)
@@ -24,3 +25,6 @@ clean:
 
 debug: 
 	$(CC) $(SOURCES) $(FLAGS_DEBUG)
+
+run_debug:
+	gdb ./a.out

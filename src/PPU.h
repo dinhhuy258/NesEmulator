@@ -52,7 +52,7 @@ class PPU
         uint8_t ReadRegister(uint16_t address);
         void Step();
         uint8_t paletteIndex[SCREEN_HEIGHT][SCREEN_WIDTH];
-        
+        bool writeLog = false;
     private:
         // CPU 8266
         CPU *cpu;

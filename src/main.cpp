@@ -6,8 +6,8 @@
 #include "MemoryCPU.h"
 #include "MemoryPPU.h"
 #include "CPU.h"
+#include "Controller.h"
 #include "Palette.h"
-
 // NES components
 Cartridge *cartridge;
 Mapper *mapper;
@@ -15,6 +15,7 @@ Memory *memoryPPU;
 PPU *ppu;
 Memory *memoryCPU;
 CPU *cpu;
+Controller *controller;
 // Delta time
 uint32_t oldTime;
 // Window size
@@ -29,6 +30,8 @@ uint8_t Step();
 void SetupTexture();
 void Display();
 void ReshapeWindow(GLsizei w, GLsizei h);
+void OnKeyPress(unsigned char key, int x, int y);
+void OnKeyRelease(unsigned char key, int x, int y);
 
 int main(int argc, char **argv)
 {
@@ -39,7 +42,7 @@ int main(int argc, char **argv)
         LOGI("Invalid NES file");
         return 0;
     }
-    Mapper *mapper = Mapper::GetMapper(cartridge);
+    mapper = Mapper::GetMapper(cartridge);
     if (mapper == NULL)
     {
         LOGI("We haven't supported this mapper");
@@ -52,6 +55,10 @@ int main(int argc, char **argv)
     memoryCPU = new MemoryCPU();
     memoryCPU->SetMapper(mapper);
     memoryCPU->SetPPU(ppu);
+
+    controller = new Controller();
+    memoryCPU->SetController(controller);
+
     cpu = new CPU(memoryCPU);
     ppu->SetCPU(cpu);
     // Init time
@@ -66,6 +73,8 @@ int main(int argc, char **argv)
     glutDisplayFunc(Display);
     glutIdleFunc(Display);
     glutReshapeFunc(ReshapeWindow);
+    glutKeyboardFunc(OnKeyPress);
+    glutKeyboardUpFunc(OnKeyRelease);
     // Setup texture
     SetupTexture();
     // Enter GLUT event processing loop
@@ -75,6 +84,7 @@ int main(int argc, char **argv)
     SAFE_DEL(mapper);
     SAFE_DEL(memoryPPU);
     SAFE_DEL(ppu);
+    SAFE_DEL(controller);
     SAFE_DEL(memoryCPU);
     SAFE_DEL(cpu);
     return 1;
@@ -161,7 +171,7 @@ void StepSeconds(double deltaTime)
 {
     int32_t cycles =  uint32_t(CPU_FREQUENCY * deltaTime);
     while(cycles > 0)
-    {
+    {   
         cycles -= Step();
     }
 }
@@ -174,5 +184,103 @@ uint8_t Step()
     {
         ppu->Step();  
     }
+    // if (cpu->writeLog == 500)
+    // {
+    //     cpu->writeLog += 1;
+    //     LOGI("Start write log");
+    //     ppu->writeLog = true;
+    // }
+    // if (cpu->writeLog == 500)
+    // {
+    //     LOGI("Write log...");
+    //     FILE *file = fopen("log.txt", "w");
+    //     for (uint16_t i = 0x0000; i <= 0x3FF0; i += 0x0010)
+    //     {
+    //         fprintf(file, "%6x\t\t", i);
+    //         for (uint16_t j = 0x0000; j <= 0x000F; ++j)
+    //         {
+    //             fprintf(file, "%x\t", memoryPPU->Read(i | j));          
+    //         }
+    //         fprintf(file, "\n"); 
+    //     }
+    //     fclose(file);
+    //     LOGI("Done");
+    //     cpu->writeLog += 1;
+    // }
+
     return cpuCycles;
+}
+
+void OnKeyPress(unsigned char key, int x, int y)
+{
+    switch(key)
+    {
+        case 'w':
+        case 'W':
+            controller->SetButton(ButtonUp, true);
+            break;
+        case 's':
+        case 'S':
+            controller->SetButton(ButtonDown, true);
+            break;
+        case 'a':
+        case 'A':
+            controller->SetButton(ButtonLeft, true);
+            break;
+        case 'd':
+        case 'D':
+            controller->SetButton(ButtonRight, true);
+            break;
+        case 'l':
+        case 'L':
+            controller->SetButton(ButtonA, true);
+            break;
+        case 'k':
+        case 'K':
+            controller->SetButton(ButtonB, true);
+            break;
+        case 32: // Space
+            controller->SetButton(ButtonSelect, true);
+            break;
+        case 13: // Enter
+            controller->SetButton(ButtonStart, true);
+            break;
+    }
+}
+
+void OnKeyRelease(unsigned char key, int x, int y)
+{
+    switch(key)
+    {
+        case 'w':
+        case 'W':
+            controller->SetButton(ButtonUp, false);
+            break;
+        case 's':
+        case 'S':
+            controller->SetButton(ButtonDown, false);
+            break;
+        case 'a':
+        case 'A':
+            controller->SetButton(ButtonLeft, false);
+            break;
+        case 'd':
+        case 'D':
+            controller->SetButton(ButtonRight, false);
+            break;
+        case 'l':
+        case 'L':
+            controller->SetButton(ButtonA, false);
+            break;
+        case 'k':
+        case 'K':
+            controller->SetButton(ButtonB, false);
+            break;
+        case 32: // Space
+            controller->SetButton(ButtonSelect, false);
+            break;
+        case 13: // Enter
+            controller->SetButton(ButtonStart, false);
+            break;
+    } 
 }

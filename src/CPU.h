@@ -95,7 +95,7 @@ class CPU
         CPU(Memory *cpuMemory);
         // return the number of cycles CPU
         uint8_t Step();
-
+        uint64_t writeLog;
     private:
         bool usePHAOpcode;
         /*
@@ -245,6 +245,16 @@ class CPU
         uint8_t AddressZeroPage();
         uint8_t AddressZeroPageX();
         uint8_t AddressZeroPageY();
+
+        // Write
+        void WriteAddressAbsolute(uint8_t value);
+        void WriteAddressAbsoluteX(uint8_t value);
+        void WriteAddressAbsoluteY(uint8_t value);
+        void WriteAddressIndirectX(uint8_t value);
+        void WriteAddressIndirectY(uint8_t value);
+        void WriteAddressZeroPage(uint8_t value);
+        void WriteAddressZeroPageX(uint8_t value);
+        void WriteAddressZeroPageY(uint8_t value);
         // Memory
         void StackPush(uint8_t value);  
         uint8_t StackPull();
@@ -253,6 +263,8 @@ class CPU
         void TriggerNMI();
         void NMI();
         void IRQ();
+        // Helper functions
+        void Branch(uint8_t offset);
         // Opcodes
         void ADC();
         void ALR();

@@ -1,9 +1,11 @@
 #ifndef _PLATFORMS_H_
 #define _PLATFORMS_H_
 
+//#define _DEBUG_
 // NES
 #define NES_FILE "../rom/nestest.nes"
-#define CPU_FREQUENCY 1789773
+//#define CPU_FREQUENCY 1789773
+#define CPU_FREQUENCY 1789772.7272727272727272
 // Display
 #define SCREEN_WIDTH 256
 #define SCREEN_HEIGHT 240
