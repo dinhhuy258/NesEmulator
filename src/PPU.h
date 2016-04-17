@@ -51,9 +51,12 @@ class PPU
         void WriteRegister(uint16_t address, uint8_t value);
         uint8_t ReadRegister(uint16_t address);
         void Step();
-        uint8_t paletteIndex[SCREEN_HEIGHT][SCREEN_WIDTH];
-        bool writeLog = false;
+        uint8_t (*frontBuffer)[SCREEN_WIDTH];
+
     private:
+        uint8_t (*backBuffer)[SCREEN_WIDTH];
+        uint8_t buffer1[SCREEN_HEIGHT][SCREEN_WIDTH];
+        uint8_t buffer2[SCREEN_HEIGHT][SCREEN_WIDTH];
         // CPU 8266
         CPU *cpu;
         // Video ram of PPU
@@ -281,28 +284,16 @@ class PPU
          * The scroll position written to PPUSCROLL is applied at the end of vertical blanking, just before rendering begins therefore 
          * these writes need to occur before the end of vblank
          * Also, because writes to PPUADDR ($2006) can overwrite the scroll position, the two writes to PPUSCROLL must be done after any 
-         * updates to VRAM using PPUADDR     
+         * updates to VRAM using PPUADDR   
+         *  
+         * The 15 bit registers currentVRAMAddress and temporaryVRAMAddress are composed this way during rendering:
+         *  yyy NN YYYYY XXXXX
+         *  ||| || ||||| +++++-- coarse X scroll
+         *  ||| || +++++-------- coarse Y scroll
+         *  ||| ++-------------- nametable select
+         *  +++----------------- fine Y scroll      
          */
-        union PPU_VRAM_ADDRESS
-        {
-            /*
-             * The 15 bit registers currentVRAMAddress and temporaryVRAMAddress are composed this way during rendering:
-             *  yyy NN YYYYY XXXXX
-             *  ||| || ||||| +++++-- coarse X scroll
-             *  ||| || +++++-------- coarse Y scroll
-             *  ||| ++-------------- nametable select
-             *  +++----------------- fine Y scroll      
-             */
-            struct PPUSCROLLBits
-            {
-                uint8_t coarseXScroll : 5;
-                uint8_t coarseYScroll : 5;
-                uint8_t nametableSelect : 2;
-                uint8_t fineYScroll : 3;
-                uint8_t reserved : 1;
-            }bits;
-            uint16_t value;
-        }currentVRAMAddress, temporaryVRAMAddress;  // 0x2005, 0x2006 x2Write. PPU SCROLL and PPU ADDRESS
+        uint16_t currentVRAMAddress, temporaryVRAMAddress;  // 0x2005, 0x2006 x2Write. PPU SCROLL and PPU ADDRESS
         uint8_t fineXScroll; // x 3 bits
         uint8_t toggle; // w 1 bits first/second write toggle 
         Tile tile;
@@ -350,6 +341,26 @@ class PPU
         uint8_t ReadOAMData();
         // 0x2007
         uint8_t ReadData();
+
+        /*
+         * Two 1-bit registers inside the PPU control the generation of NMI signals
+         * Frame timing and accesses to the PPU's PPUCTRL and PPUSTATUS registers change 
+         * these registers as follows, regardless of whether rendering is enabled:
+         *   1- Start of vertical blanking: Set NMI_occurred in PPU to true
+         *   2- End of vertical blanking, sometime in pre-render scanline: Set NMI_occurred to false.
+         *   3- Read PPUSTATUS: Return old status of NMI_occurred in bit 7, then set NMI_occurred to false.
+         *   4- Write to PPUCTRL: Set NMI_output to bit 7.
+         * The PPU pulls NMI low if and only if both NMI_occurred and NMI_output are true
+         * By toggling NMI_output (PPUCTRL.7) during vertical blank without reading PPUSTATUS, 
+         * a program can cause /NMI to be pulled low multiple times, causing multiple NMIs to 
+         * be generated
+         * NMI_occurred: bit 7 of PPUSTATUS
+         * NMI_output: bit 7 of PPUCTRL 
+         */
+        bool nmiPrevious;
+        uint8_t nmiDelay;
+        void NMIChanged();
+
         // The coarse X component of v needs to be incremented when the next tile is reached
         void CoarseXIncrement();
         /*
@@ -372,6 +383,7 @@ class PPU
         uint8_t GetBackgroundPixel();
         uint8_t GetSpritePixel(uint8_t &index);
         void RenderPixel();
+        void SwapBuffer();
 };
 
 #endif

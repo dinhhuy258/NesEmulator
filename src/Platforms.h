@@ -3,12 +3,15 @@
 
 //#define _DEBUG_
 // NES
-#define NES_FILE "../rom/nestest.nes"
+#define NES_FILE "../rom/Mario.nes"
+//#define NES_FILE "../test/ppu/sprite0hit/06.right_edge.nes"
+
 //#define CPU_FREQUENCY 1789773
 #define CPU_FREQUENCY 1789772.7272727272727272
 // Display
 #define SCREEN_WIDTH 256
 #define SCREEN_HEIGHT 240
+#define MODIFIER 2
 // Bit
 #define SET 1
 #define CLEAR 0
@@ -21,7 +24,7 @@
 #define FLAG_CONSTANT    0x20
 #define FLAG_OVERFLOW    0x40
 #define FLAG_NEGATIVE    0x80
-// The interrup vector
+// The interrup vector table
 #define NMI_VECTOR_LOW      0xFFFA
 #define NMI_VECTOR_HIGH     0xFFFB
 #define RESET_VECTOR_LOW    0xFFFC
@@ -31,6 +34,6 @@
 // Macro
 #define SAFE_DEL(p) if ((p) != NULL) { delete (p); (p) = NULL;}
 #define SAFE_DEL_ARRAY(p) if ((p) != NULL) { delete[] (p); (p) = NULL;}
-#define LOGI(...) printf(__VA_ARGS__); printf("\n");
+#define LOGI(...) do { printf(__VA_ARGS__); printf("\n"); } while(0);
 
 #endif //_PLATFORMS_H_

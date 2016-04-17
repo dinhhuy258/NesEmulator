@@ -8,6 +8,7 @@
 #include "CPU.h"
 #include "Controller.h"
 #include "Palette.h"
+
 // NES components
 Cartridge *cartridge;
 Mapper *mapper;
@@ -19,9 +20,8 @@ Controller *controller;
 // Delta time
 uint32_t oldTime;
 // Window size
-int modifier = 2;
-int displayWidth = SCREEN_WIDTH * modifier;
-int displayHeight = SCREEN_HEIGHT * modifier;
+int displayWidth = SCREEN_WIDTH * MODIFIER;
+int displayHeight = SCREEN_HEIGHT * MODIFIER;
 uint8_t screenData[SCREEN_HEIGHT][SCREEN_WIDTH][3]; 
 
 double GetDeltaTime();
@@ -65,7 +65,7 @@ int main(int argc, char **argv)
     oldTime = 0;
     // Init GLUT and create window
     glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
     glutInitWindowSize(displayWidth, displayHeight);
     glutInitWindowPosition(100,100);
     glutCreateWindow("NesEmulator by Huy Duong");
@@ -141,7 +141,8 @@ void UpdateTexture()
     {
         for(int x = 0; x < SCREEN_WIDTH; ++x)
         {
-            uint32_t color = palette[ppu->paletteIndex[y][x]];
+            uint32_t color = palette[ppu->frontBuffer[y][x]];
+            //color = palette[memoryPPU->Read(0x3F00 | 12)];
             screenData[y][x][0] = uint8_t(color >> 16);
             screenData[y][x][1] = uint8_t(color >> 8);
             screenData[y][x][2] = uint8_t(color);
@@ -184,30 +185,6 @@ uint8_t Step()
     {
         ppu->Step();  
     }
-    // if (cpu->writeLog == 500)
-    // {
-    //     cpu->writeLog += 1;
-    //     LOGI("Start write log");
-    //     ppu->writeLog = true;
-    // }
-    // if (cpu->writeLog == 500)
-    // {
-    //     LOGI("Write log...");
-    //     FILE *file = fopen("log.txt", "w");
-    //     for (uint16_t i = 0x0000; i <= 0x3FF0; i += 0x0010)
-    //     {
-    //         fprintf(file, "%6x\t\t", i);
-    //         for (uint16_t j = 0x0000; j <= 0x000F; ++j)
-    //         {
-    //             fprintf(file, "%x\t", memoryPPU->Read(i | j));          
-    //         }
-    //         fprintf(file, "\n"); 
-    //     }
-    //     fclose(file);
-    //     LOGI("Done");
-    //     cpu->writeLog += 1;
-    // }
-
     return cpuCycles;
 }
 

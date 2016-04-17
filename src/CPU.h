@@ -95,7 +95,7 @@ class CPU
         CPU(Memory *cpuMemory);
         // return the number of cycles CPU
         uint8_t Step();
-        uint64_t writeLog;
+
     private:
         bool usePHAOpcode;
         /*
@@ -167,6 +167,7 @@ class CPU
             /*Ex*/"CPX", "SBC", "NOP", "ISC", "CPX", "SBC", "INC", "ISC", "INX", "SBC", "NOP", "SBC", "CPX", "SBC", "INC", "ISC",
             /*Fx*/"BEQ", "SBC", "KIL", "ISC", "NOP", "SBC", "INC", "ISC", "SED", "SBC", "NOP", "ISC", "NOP", "SBC", "INC", "ISC",
         };
+
         void(CPU::*opcodeFunctions[256])(void) = 
         {
                     /*x0         x1         x2         x3         x4         x5         x6         x7         x8         x9         xA         xB         xC         xD         xE         xF*/
@@ -232,14 +233,13 @@ class CPU
 
     private:
         // Adress mode
+        uint8_t ReadMemory(bool checkPage = false);
         uint8_t AddressAbsolute();
         uint8_t AddressAbsoluteX(bool checkPage = false);
         uint8_t AddressAbsoluteY(bool checkPage = false);
         uint8_t AddressAccumulator();
         uint8_t AddressImmediate();
-        uint8_t AddressImplied();
         uint8_t AddressIndirectX();
-        uint8_t AddressIndirect();
         uint8_t AddressIndirectY(bool checkPage = false);
         uint8_t AddressRelative();
         uint8_t AddressZeroPage();
@@ -247,6 +247,7 @@ class CPU
         uint8_t AddressZeroPageY();
 
         // Write
+        void WriteMemory(uint8_t value);
         void WriteAddressAbsolute(uint8_t value);
         void WriteAddressAbsoluteX(uint8_t value);
         void WriteAddressAbsoluteY(uint8_t value);

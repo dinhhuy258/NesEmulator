@@ -12,7 +12,7 @@ SOURCES=main.cpp \
 		Controller.cpp
 BIN=NesEmulator
 
-all: $(SOURCES) $(BIN)
+all: clean $(SOURCES) $(BIN)
 
 $(BIN): $(SOURCES)
 	$(CC) $(SOURCES) -o $@ $(FLAGS)

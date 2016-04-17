@@ -1,6 +1,19 @@
 #include "MemoryCPU.h"
 #include "PPU.h"
 #include "Platforms.h"
+
+MemoryCPU::MemoryCPU()
+{
+    // Initialize ram momory
+    for (uint16_t i = 0; i < 0x800; i+=0x10)
+    {
+        for (uint8_t j = 0; j <= 0x0F; ++j)
+        {
+            ram[i | j] = ((j <= 0x03) || ((j > 0x07) && (j <= 0x0B))) ? 0x00 : 0xFF;
+        }
+    }
+}
+
 uint8_t MemoryCPU::Read(uint16_t address)
 {
     uint8_t value = 0;
@@ -57,7 +70,7 @@ uint8_t MemoryCPU::Read(uint16_t address)
 void MemoryCPU::Write(uint16_t address, uint8_t value)
 {
     if (address < 0x0800)
-    {
+    {   
         ram[address] = value;  
     }
     else if (address < 0x2000)

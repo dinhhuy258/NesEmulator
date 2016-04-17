@@ -6,6 +6,7 @@
 class MemoryCPU : public Memory
 {
     public:
+        MemoryCPU();
         void SetPPU(PPU *ppu);
         void SetMapper(Mapper *mapper);
         uint8_t Read(uint16_t address);

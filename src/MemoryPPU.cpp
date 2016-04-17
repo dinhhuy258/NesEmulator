@@ -19,33 +19,15 @@ uint8_t MemoryPPU::Read(uint16_t address)
         //$3000-$3EFF: Mirrors $2000-$2FFF 
         value = nametables[GetMirrorAddress(address - 0x1000) - 0x2000];
     }
-    else if (address < 0x3F20)
-    {
-        //$3F00-$3F1F: Patlette
-        /*
-         * Mirroring is used so that every four bytes in the palettes is a copy of $3F00
-         * Therefore $3F04, $3F08,$3F0C, $3F10, $3F14, $3F18 and $3F1C are just copies of $3F00
-         */
-        if (address % 4 == 0)
-        {
-            value = palette[0x3F00 - 0x3F00];    
-        }
-        else
-        {
-            value = palette[address - 0x3F00];
-        }
-    }
     else if (address < 0x4000)
     {
-        //$3F20-$3FFF: Mirrors $3F00-$3F1F
-        if ((address & 0x3F1F) % 4 == 0)
+        // Palette
+        address = address % 32;
+        if ((address % 4) == 0)
         {
-            value = palette[0x3F00 - 0x3F00];    
+            address = 0;
         }
-        else
-        {
-            value = palette[(address & 0x3F1F) - 0x3F00];
-        }
+        value = palette[address];
     }
     else
     {
@@ -72,36 +54,15 @@ void MemoryPPU::Write(uint16_t address, uint8_t value)
         //$3000-$3EFF: Mirrors $2000-$2FFF 
         nametables[GetMirrorAddress(address - 0x1000) - 0x2000]  = value;
     }
-    else if (address < 0x3F20)
-    {
-        //$3F00-$3F1F: Patlette
-        /*
-         * Mirroring is used so that every four bytes in the palettes is a copy of $3F00
-         * Therefore $3F04, $3F08,$3F0C, $3F10, $3F14, $3F18 and $3F1C are just copies of $3F00
-         */
-        if (address % 4 == 0)
-        {
-            if (address == 0x3F00)
-            {
-                palette[0x3F00 - 0x3F00] = value;    
-            }
-        }
-        else
-        {
-            palette[address - 0x3F00] = value;
-        }
-    }
     else if (address < 0x4000)
     {
-        //$3F20-$3FFF: Mirrors $3F00-$3F1F
-        if ((address & 0x3F1F) % 4 == 0)
+        // Palette
+        address = address % 32;
+        if (address == 16)
         {
-            //palette[0x3F00 - 0x3F00] = value;    
+            address = 0;
         }
-        else
-        {
-            palette[(address & 0x3F1F) - 0x3F00] = value;
-        }
+        palette[address] = value;
     }
     else
     {

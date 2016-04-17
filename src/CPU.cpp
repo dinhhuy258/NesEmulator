@@ -2,43 +2,20 @@
 #include <assert.h>
 #include "Platforms.h"
 
-#include <termios.h>
-#include <unistd.h>
-
-int _getch(void)
-{
-    struct termios oldattr, newattr;
-    int ch;
-    tcgetattr( STDIN_FILENO, &oldattr );
-    newattr = oldattr;
-    newattr.c_lflag &= ~( ICANON | ECHO );
-    tcsetattr( STDIN_FILENO, TCSANOW, &newattr );
-    ch = getchar();
-    tcsetattr( STDIN_FILENO, TCSANOW, &oldattr );
-    return ch;
-}
-
 CPU::CPU(Memory *cpuMemory)
 {
     A = 0;
     X = 0;
     Y = 0;
     SP = 0xFF;
-    PC = 0xC004;
     P.byte = 0x24;
     cycles = 0;
     stall = 0;
     this->cpuMemory = cpuMemory;
     interrupt = InterruptNone;
-
-    writeLog = 0;
-
-    // StackPush(0xFF);
-    // StackPush(0xFF);
-    // StackPush(0x00);
-    // StackPush(0x02);
-    // StackPush(0x30);
-    // PC = 0x8000;
+    uint16_t lo = cpuMemory->Read(RESET_VECTOR_LOW);
+    uint16_t hi = cpuMemory->Read(RESET_VECTOR_HIGH);
+    PC = (hi << 8) | lo;
 }
 
 uint8_t CPU::Step()
@@ -53,7 +30,6 @@ uint8_t CPU::Step()
     switch (interrupt)
     {
         case InterruptNMI:
-            //LOGI("NMI");
             NMI();
             break;
         case InterruptIRQ:
@@ -61,41 +37,54 @@ uint8_t CPU::Step()
             break;
     }
     interrupt = InterruptNone;
-    static bool printLog = false;
-    if (PC == 0xC054)
-    {
-        int i = 0;
-
-        //printLog = true;
-    }
-    if (PC == 0xC04C)
-    {
-        int i = 0;
-        printLog = true;
-    } 
-    if (PC == 0xC291)
-    {
-        ++writeLog;
-    }
-    if (PC == 0xC2D3)
-    {
-        int i = 0;
-
-        //printLog = true;
-    }  
-       
     currentOpcode = cpuMemory->Read(PC++); 
-    if (printLog)
-    {
-        //LOGI("PC: %x A: %x X: %x Y: %x", PC - 1, A, X, Y);    
-       // LOGI("PC: %x - Opcode: %s", PC - 1, opcodeNames[currentOpcode].c_str());    
-    }
     // Implement this opcode
     (this->*opcodeFunctions[currentOpcode])();
     return uint8_t(cycles - preCycles);
 }
 
 // Address mode
+uint8_t CPU::ReadMemory(bool checkPage)
+{
+    uint8_t value;
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case Absolute:
+            value = AddressAbsolute();
+            break;
+        case AbsoluteX:
+            value = AddressAbsoluteX(checkPage);
+            break;
+        case AbsoluteY:
+            value = AddressAbsoluteY(checkPage);
+            break;
+        case Accumulator:
+            value = AddressAccumulator();
+            break;
+        case Immediate:
+            value = AddressImmediate();
+            break;
+        case IndirectX:
+            value = AddressIndirectX();
+            break;
+        case IndirectY:
+            value = AddressIndirectY(checkPage);
+            break;
+        case ZeroPage:
+            value = AddressZeroPage();
+            break;
+        case ZeroPageX:
+            value = AddressZeroPageX();
+            break;
+        case ZeroPageY:
+            value = AddressZeroPageY();
+            break;
+        default:
+            assert(0);
+    }
+    return value;
+}
+
 uint8_t CPU::AddressAbsolute()
 {
     // 6502 is little endian
@@ -150,28 +139,11 @@ uint8_t CPU::AddressImmediate()
     return cpuMemory->Read(PC++);
 }
 
-uint8_t CPU::AddressImplied()
-{
-    // not used
-    return 0;
-}
-
 uint8_t CPU::AddressIndirectX()
 {
     // 6502 is little endian
     uint16_t baseAddress = cpuMemory->Read(PC++);
     baseAddress = (baseAddress + X) & 0xFF;
-    uint16_t lo = cpuMemory->Read(baseAddress);
-    uint16_t hi = cpuMemory->Read((baseAddress + 1) & 0xFF);
-    uint16_t address = (hi << 8) | lo;
-    lastAddress = address;
-    return cpuMemory->Read(address);
-}
-
-uint8_t CPU::AddressIndirect()
-{
-    // 6502 is little endian
-    uint16_t baseAddress = cpuMemory->Read(PC++);
     uint16_t lo = cpuMemory->Read(baseAddress);
     uint16_t hi = cpuMemory->Read((baseAddress + 1) & 0xFF);
     uint16_t address = (hi << 8) | lo;
@@ -227,6 +199,38 @@ uint8_t CPU::AddressZeroPageY()
 }
 
 // Write
+void CPU::WriteMemory(uint8_t value)
+{
+    switch(opcodeAddressModes[currentOpcode])
+    {
+        case ZeroPage:
+            WriteAddressZeroPage(value); 
+            break;
+        case ZeroPageX:
+            WriteAddressZeroPageX(value); 
+            break;
+        case ZeroPageY:
+            WriteAddressZeroPageY(value);
+            break;
+        case Absolute:
+            WriteAddressAbsolute(value); 
+            break;
+        case AbsoluteX:
+            WriteAddressAbsoluteX(value); 
+            break;
+        case AbsoluteY:
+            WriteAddressAbsoluteY(value); 
+            break;
+        case IndirectX:
+            WriteAddressIndirectX(value); 
+            break;
+        case IndirectY:
+            WriteAddressIndirectY(value); 
+            break;
+        default:
+            assert(0);
+    }       
+}
 
 void CPU::WriteAddressAbsolute(uint8_t value)
 {
@@ -320,7 +324,6 @@ void CPU::TriggerNMI()
 
 void CPU::NMI()
 {
-    ++PC;
     StackPush((PC >> 8) & 0xFF);
     StackPush(PC & 0xFF);
     StackPush(P.byte | FLAG_BREAK);
@@ -333,7 +336,6 @@ void CPU::NMI()
 
 void CPU::IRQ()
 {
-    ++PC;
     StackPush((PC >> 8) & 0xFF);
     StackPush(PC & 0xFF);
     StackPush(P.byte | FLAG_BREAK);
@@ -384,36 +386,7 @@ void CPU::ADC()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(true);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     uint16_t result = A + value + P.bits.C;
     P.bits.V = (((A & 0x80) != (result & 0x80)) && ((value & 0x80) != (result & 0x80))) ? SET : CLEAR;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
@@ -449,36 +422,7 @@ void CPU::AND()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(true);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     A = A & value;
     P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (A == 0) ? SET : CLEAR;
@@ -502,27 +446,7 @@ void CPU::ASL()
      * Absolute      ASL $4400     $0E  3   6
      * Absolute,X    ASL $4400,X   $1E  3   7
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Accumulator:
-            value = AddressAccumulator();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     P.bits.C = ((value & 0x80) == 0x80) ? SET : CLEAR;
     uint8_t result = (value << 1) & 0xFE; // make sure that the lowest bit is equal 0
     P.bits.Z = (result == 0) ? SET : CLEAR;
@@ -617,18 +541,7 @@ void CPU::BIT()
      * Zero Page     BIT $44       $24  2   3
      * Absolute      BIT $4400     $2C  3   4
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t result = A & value;
     //NOTE: Refer here http://www.6502.org/tutorials/6502opcodes.html#BIT to know how to implement this opcode
     P.bits.N = ((value & 0x80) == 0x80) ? SET : CLEAR;
@@ -832,36 +745,7 @@ void CPU::CMP()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(true);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     uint8_t result = A - value;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (result == 0) ? SET : CLEAR;
@@ -880,21 +764,7 @@ void CPU::CPX()
      * Zero Page     CPX $44       $E4  2   3
      * Absolute      CPX $4400     $EC  3   4
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t result = X - value;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (result == 0) ? SET : CLEAR;
@@ -913,21 +783,7 @@ void CPU::CPY()
      * Zero Page     CPY $44       $C4  2   3
      * Absolute      CPY $4400     $CC  3   4
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t result = Y - value;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (result == 0) ? SET : CLEAR;
@@ -951,33 +807,7 @@ void CPU::DCP()
      * Indirect,X  |DCP (arg,X)|$C3| 2 | 8
      * Indirect,Y  |DCP (arg),Y|$D3| 2 | 8
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(false);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(false);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(false);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     // DEC
     --value;
     // CMP
@@ -1001,24 +831,7 @@ void CPU::DEC()
      * Absolute      DEC $4400     $CE  3   6
      * Absolute,X    DEC $4400,X   $DE  3   7 
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t result = (value - 1) & 0xFF;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (result == 0) ? SET : CLEAR;
@@ -1076,36 +889,7 @@ void CPU::EOR()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(true);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     A = A ^ value;
     P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (A == 0) ? SET : CLEAR;
@@ -1124,24 +908,7 @@ void CPU::INC()
      * Absolute      INC $4400     $EE  3   6
      * Absolute,X    INC $4400,X   $FE  3   7
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t result = (value + 1) & 0xFF;
     P.bits.N = ((result & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (result == 0) ? SET : CLEAR;
@@ -1198,33 +965,7 @@ void CPU::ISC()
      * Indirect,Y  |ISC (arg),Y|$F3| 2 | 8
      *
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(false);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(false);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(false);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     // INC
     ++value;
     cpuMemory->Write(lastAddress, value);
@@ -1316,33 +1057,7 @@ void CPU::LAX()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageY:
-            value = AddressZeroPageY();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     A = value;
     X = value;
     P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
@@ -1369,36 +1084,7 @@ void CPU::LDA()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(true);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     A = value;
     P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (A == 0) ? SET : CLEAR;
@@ -1420,27 +1106,7 @@ void CPU::LDX()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageY:
-            value = AddressZeroPageY();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     X = value;
     P.bits.N = ((X & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (X == 0) ? SET : CLEAR;
@@ -1462,27 +1128,7 @@ void CPU::LDY()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     Y = value;
     P.bits.N = ((Y & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (Y == 0) ? SET : CLEAR;
@@ -1502,27 +1148,7 @@ void CPU::LSR()
      * Absolute      LSR $4400     $4E  3   6
      * Absolute,X    LSR $4400,X   $5E  3   7
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Accumulator:
-            value = AddressAccumulator();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     P.bits.N = CLEAR;
     P.bits.C = value & 0x01;
     uint8_t result = (value >> 1) & 0x7F; // make sure that the highest bit is equal 0
@@ -1551,27 +1177,9 @@ void CPU::NOP()
      * Implied        NOP           $EA  1   2
      * ... 
      */
-    switch(opcodeAddressModes[currentOpcode])
+    if (opcodeAddressModes[currentOpcode] != Implied)
     {
-        case Implied:
-            break;
-        case Immediate:
-            AddressImmediate();
-            break;
-        case ZeroPage:
-            AddressZeroPage();
-            break;
-        case ZeroPageX:
-            AddressZeroPageX();
-            break;
-        case Absolute:
-            AddressAbsolute();
-            break;  
-        case AbsoluteX:
-            AddressAbsoluteX(true);
-            break; 
-        default:
-            assert(0);
+        ReadMemory(true);
     }
     cycles += opcodeCycles[currentOpcode];
 }
@@ -1594,36 +1202,7 @@ void CPU::ORA()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(true);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     A = A | value;
     P.bits.N = ((A & 0x80) == 0x80) ? SET : CLEAR;
     P.bits.Z = (A == 0) ? SET : CLEAR;
@@ -1714,33 +1293,7 @@ void CPU::RLA()
      * Indirect,X  |RLA (arg,X)|$23| 2 | 8
      * Indirect,Y  |RLA (arg),Y|$33| 2 | 8
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage(); 
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX(); 
-            break;
-        case Absolute:
-            value = AddressAbsolute(); 
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(); 
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(); 
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t temp = value & 0x80; // save the highest bit for P.C
     value = (value << 1) & 0xFE; // make sure that the lowest bit is equal 0
     value = value | P.bits.C; // assign P.C to the lowest bit of the result
@@ -1765,27 +1318,7 @@ void CPU::ROL()
      * Absolute      ROL $4400     $2E  3   6
      * Absolute,X    ROL $4400,X   $3E  3   7
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Accumulator:
-            value = AddressAccumulator();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t temp = value & 0x80; // save the highest bit for P.C
     uint8_t result = (value << 1) & 0xFE; // make sure that the lowest bit is equal 0
     result = result | P.bits.C; // assign P.C to the lowest bit of the result
@@ -1817,27 +1350,7 @@ void CPU::ROR()
      * Absolute      ROR $4400     $6E  3   6
      * Absolute,X    ROR $4400,X   $7E  3   7
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Accumulator:
-            value = AddressAccumulator();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t temp = value & 0x01; // save the lowest bit for P.C
     uint8_t result = (value >> 1) & 0x7F; // make sure that the highest bit is equal 0
     result = result | ((P.bits.C == SET) ? 0x80 : 0x00); // assign P.C to the highest bit of the result
@@ -1872,33 +1385,7 @@ void CPU::RRA()
      * Indirect,X  |RRA (arg,X)|$63| 2 | 8
      * Indirect,Y  |RRA (arg),Y|$73| 2 | 8
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage(); 
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX(); 
-            break;
-        case Absolute:
-            value = AddressAbsolute(); 
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(); 
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(); 
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     uint8_t temp = value & 0x01; // save the lowest bit for P.C
     value = (value >> 1) & 0x7F; // make sure that the highest bit is equal 0
     value = value | ((P.bits.C == SET) ? 0x80 : 0x00); // assign P.C to the highest bit of the result
@@ -1964,23 +1451,7 @@ void CPU::SAX()
      * Absolute    |SAX arg    |$8F| 3 | 4
      */
     uint8_t result = X & A;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            WriteAddressZeroPage(result);
-            break;
-        case ZeroPageY:
-            WriteAddressZeroPageY(result); 
-            break;
-        case IndirectX:
-            WriteAddressIndirectX(result); 
-            break;
-        case Absolute:
-            WriteAddressAbsolute(result); 
-            break;
-        default:
-            assert(0);
-    }
+    WriteMemory(result);
     cycles += opcodeCycles[currentOpcode];
 
 }
@@ -2003,36 +1474,7 @@ void CPU::SBC()
      *
      * + Add 1 cycle if page boundary crossed
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case Immediate:
-            value = AddressImmediate();
-            break;
-        case ZeroPage:
-            value = AddressZeroPage();
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX();
-            break;
-        case Absolute:
-            value = AddressAbsolute();
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(true);
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(true);
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY(true);
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory(true);
     int16_t result = A - value - (1 - P.bits.C);   
     //Note: Refer http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html for more information 
     P.bits.V = (((A & 0x80) == 0x80) != ((value & 0x80) == 0x80)) ? SET : CLEAR;
@@ -2109,33 +1551,7 @@ void CPU::SLO()
      * Indirect,X  |SLO (arg,X)|$03| 2 | 8
      * Indirect,Y  |SLO (arg),Y|$13| 2 | 8
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage(); 
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX(); 
-            break;
-        case Absolute:
-            value = AddressAbsolute(); 
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(); 
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(); 
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     // ASL  
     P.bits.C = ((value & 0x80) == 0x80) ? SET : CLEAR;
     value = (value << 1) & 0xFE; // make sure that the lowest bit is equal 0
@@ -2162,33 +1578,7 @@ void CPU::SRE()
      * Indirect,X  |SRE (arg,X)|$43| 2 | 8
      * Indirect,Y  |SRE (arg),Y|$53| 2 | 8
      */
-    uint8_t value;
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            value = AddressZeroPage(); 
-            break;
-        case ZeroPageX:
-            value = AddressZeroPageX(); 
-            break;
-        case Absolute:
-            value = AddressAbsolute(); 
-            break;
-        case AbsoluteX:
-            value = AddressAbsoluteX(); 
-            break;
-        case AbsoluteY:
-            value = AddressAbsoluteY(); 
-            break;
-        case IndirectX:
-            value = AddressIndirectX();
-            break;
-        case IndirectY:
-            value = AddressIndirectY();
-            break;
-        default:
-            assert(0);
-    }
+    uint8_t value = ReadMemory();
     P.bits.C = value & 0x01;
     value = (value >> 1) & 0x7F; // make sure that the highest bit is equal 0
     cpuMemory->Write(lastAddress, value);
@@ -2212,33 +1602,7 @@ void CPU::STA()
      * Indirect,X    STA ($44,X)   $81  2   6
      * Indirect,Y    STA ($44),Y   $91  2   6
      */
-
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            WriteAddressZeroPage(A); 
-            break;
-        case ZeroPageX:
-            WriteAddressZeroPageX(A); 
-            break;
-        case Absolute:
-            WriteAddressAbsolute(A); 
-            break;
-        case AbsoluteX:
-            WriteAddressAbsoluteX(A); 
-            break;
-        case AbsoluteY:
-            WriteAddressAbsoluteY(A); 
-            break;
-        case IndirectX:
-            WriteAddressIndirectX(A); 
-            break;
-        case IndirectY:
-            WriteAddressIndirectY(A); 
-            break;
-        default:
-            assert(0);
-    }
+    WriteMemory(A);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -2252,20 +1616,7 @@ void CPU::STX()
      * Zero Page,Y   STX $44,Y     $96  2   4
      * Absolute      STX $4400     $8E  3   4
      */
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            WriteAddressZeroPage(X); 
-            break;
-        case ZeroPageY:
-            WriteAddressZeroPageY(X); 
-            break;
-        case Absolute:
-            WriteAddressAbsolute(X);
-            break;
-        default:
-            assert(0);
-    }
+    WriteMemory(X);
     cycles += opcodeCycles[currentOpcode];
 }
 
@@ -2279,20 +1630,7 @@ void CPU::STY()
      * Zero Page,X   STY $44,X     $94  2   4
      * Absolute      STY $4400     $8C  3   4
      */
-    switch(opcodeAddressModes[currentOpcode])
-    {
-        case ZeroPage:
-            WriteAddressZeroPage(Y); 
-            break;
-        case ZeroPageX:
-            WriteAddressZeroPageX(Y); 
-            break;
-        case Absolute:
-            WriteAddressAbsolute(Y); 
-            break;
-        default:
-            assert(0);
-    }
+    WriteMemory(Y);
     cycles += opcodeCycles[currentOpcode];
 }
 
