@@ -142,7 +142,7 @@ void UpdateTexture()
         for(int x = 0; x < SCREEN_WIDTH; ++x)
         {
             uint32_t color = palette[ppu->frontBuffer[y][x]];
-            //color = palette[memoryPPU->Read(0x3F00 | 12)];
+            //color = palette[memoryPPU->Read(0x3F00 | 16)];
             screenData[y][x][0] = uint8_t(color >> 16);
             screenData[y][x][1] = uint8_t(color >> 8);
             screenData[y][x][2] = uint8_t(color);

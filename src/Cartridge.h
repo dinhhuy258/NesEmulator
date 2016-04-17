@@ -32,11 +32,19 @@ struct NESFileHeader
         uint8_t byte;
         struct RomControlBits1
         {
+        #if __BYTE_ORDER == __LITTLE_ENDIAN
             uint8_t mirroring : 1;
             uint8_t batteryBackedPresent : 1;
             uint8_t trainerPresent : 1;
             uint8_t fourScreenMode : 1;
-            uint8_t mapperNumber : 4;      
+            uint8_t mapperNumber : 4; 
+        #elif __BYTE_ORDER == __BIG_ENDIAN  
+            uint8_t mapperNumber : 4;
+            uint8_t fourScreenMode : 1;
+            uint8_t trainerPresent : 1; 
+            uint8_t batteryBackedPresent : 1;
+            uint8_t mirroring : 1;      
+        #endif            
         }bits;
     }romControlByte1;
     /*
@@ -51,8 +59,13 @@ struct NESFileHeader
         uint8_t byte;
         struct RomControlBits2
         {
+        #if __BYTE_ORDER == __LITTLE_ENDIAN
             uint8_t reserved : 4;
-            uint8_t mapperNumber : 4;           
+            uint8_t mapperNumber : 4;   
+        #elif __BYTE_ORDER == __BIG_ENDIAN  
+            uint8_t mapperNumber : 4;
+            uint8_t reserved : 4;
+        #endif                    
         }bits;
     }romControlByte2;
     uint8_t numRam; // Number of 8 KB RAM banks. For compatibility with previous versions of the iNES format, assume 1 page of RAM when this is 0

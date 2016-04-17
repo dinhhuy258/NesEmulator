@@ -8,7 +8,8 @@
  * NROM-256 with 32 KiB PRG ROM and 8 KiB CHR ROM
  * NROM-128 with 16 KiB PRG ROM and 8 KiB CHR ROM
  * Your program is mapped into $8000-$FFFF (NROM-256) or both $8000-$BFFF and $C000-$FFFF (NROM-128)
- * Most NROM-128 games actually run in $C000-$FFFF rather than $8000-$BFFF because it makes the program easier to assemble and link. 
+ * Most NROM-128 games actually run in $C000-$FFFF rather than $8000-$BFFF because it makes 
+ * the program easier to assemble and link 
  */
 
 enum NROM

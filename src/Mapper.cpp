@@ -1,6 +1,7 @@
 #include "Mapper.h"
 #include <assert.h>
 #include "Mapper0.h"
+#include "Mapper2.h"
 
 Mapper* Mapper::GetMapper(Cartridge *cartridge)
 {
@@ -9,6 +10,9 @@ Mapper* Mapper::GetMapper(Cartridge *cartridge)
     {
         case 0:
             mapper = new Mapper0(cartridge);
+            break;
+        case 2:
+            mapper = new Mapper2(cartridge);
             break;
     }
     return mapper;

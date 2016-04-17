@@ -59,6 +59,15 @@ bool Cartridge::LoadNESFile(std::string fileName)
             isCHRRam = true; 
             chrRomRam = new uint8_t*[1];
             chrRomRam[0] = new uint8_t[8192]; //8KB
+
+            // Initialize ram memory
+            for (uint16_t i = 0; i < 0x2000; i += 0x10)
+            {
+                for (uint8_t j = 0; j <= 0x0F; ++j)
+                {
+                    chrRomRam[0][i | j] = ((j <= 0x03) || ((j > 0x07) && (j <= 0x0B))) ? 0x00 : 0xFF;
+                }
+            }
         }
         else
         {

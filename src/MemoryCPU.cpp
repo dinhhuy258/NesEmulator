@@ -4,8 +4,8 @@
 
 MemoryCPU::MemoryCPU()
 {
-    // Initialize ram momory
-    for (uint16_t i = 0; i < 0x800; i+=0x10)
+    // Initialize ram memory
+    for (uint16_t i = 0; i < 0x800; i += 0x10)
     {
         for (uint8_t j = 0; j <= 0x0F; ++j)
         {

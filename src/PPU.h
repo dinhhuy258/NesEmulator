@@ -14,11 +14,19 @@ struct Sprite
     { 
         struct AttributeBits
         {
+        #if __BYTE_ORDER == __LITTLE_ENDIAN
             uint8_t attributeValue : 2;
             uint8_t unimplemented : 3;
             uint8_t priority : 1; // (0: in front of background; 1: behind background)
             uint8_t flipHorizontal: 1;
+            uint8_t flipVertical : 1;        
+        #elif __BYTE_ORDER == __BIG_ENDIAN  
             uint8_t flipVertical : 1;
+            uint8_t flipHorizontal: 1;
+            uint8_t priority : 1; // (0: in front of background; 1: behind background)  
+            uint8_t unimplemented : 3;
+            uint8_t attributeValue : 2;
+        #endif        
         }bits;
         uint8_t byte;
     }attribute;
@@ -39,7 +47,6 @@ struct Tile
     uint8_t attributeTableByte; // attribute address = 0x23C0 | (v & 0x0C00) | ((v >> 4) & 0x38) | ((v >> 2) & 0x07)
     uint8_t tileLow;
     uint8_t tileHigh;
-
     uint64_t paletteIndices;
 };
 
@@ -130,35 +137,41 @@ class PPU
         union PPU_CTRL 
         {
             /*
-             * 7  bit  0
-             * ---- ----
-             * VPHB SINN
+             * Bits 0-1: Base nametable address (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
+             * Bit 2   : VRAM address increment per CPU read/write of PPUDATA
+             *           (0: add 1, going across; 1: add 32, going down)
+             * Bit 3   : Sprite pattern table address for 8x8 sprites (0: $0000; 1: $1000; ignored in 8x16 mode)
+             * Bit 4   : Background pattern table address (0: $0000; 1: $1000)
+             * Bit 5   : Sprite size (0: 8x8; 1: 8x16)
+             * Bit 6   : PPU master/slave select
+             * Bit 7   : Generate an NMI at the start of the Vertical blanking interval (0: off; 1: on) 
+             *
+             *    0     1     2     3     4     5     6     7
+             * +-----+-----+-----+-----+-----+-----+-----+-----+
+             * |           |     |     |     |     |     |     |     
+             * | Nametable |  I  |  S  |  B  |  S  |  P  |  V  |
+             * |           |     |     |     |     |     |     |
+             * +-----+-----+-----+-----+-----+-----+-----+-----+
              */
             struct PPU_CTRL_BITS
             {
-                /*
-                 * Base nametable address
-                 * (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
-                 */
+            #if __BYTE_ORDER == __LITTLE_ENDIAN
                 uint8_t nametableAddress : 2;
-                /*
-                 * VRAM address increment per CPU read/write of PPUDATA
-                 * (0: add 1, going across; 1: add 32, going down)
-                 */
                 uint8_t addressIncrement : 1;
-                /*
-                 * Sprite pattern table address for 8x8 sprites
-                 * (0: $0000; 1: $1000; ignored in 8x16 mode)
-                 */
                 uint8_t spritePatternTableAddress : 1;
-                // Background pattern table address (0: $0000; 1: $1000)
                 uint8_t backgroundPatternTableAddress : 1;
-                // Sprite size (0: 8x8; 1: 8x16)
                 uint8_t spriteSize : 1;
-                // PPU master/slave select
                 uint8_t P : 1; 
-                // Generate an NMI at the start of the vertical blanking interval (0: off; 1: on)
+                uint8_t generateNMI : 1;           
+            #elif __BYTE_ORDER == __BIG_ENDIAN  
                 uint8_t generateNMI : 1;
+                uint8_t P : 1;
+                uint8_t spriteSize : 1;        
+                uint8_t backgroundPatternTableAddress : 1;
+                uint8_t spritePatternTableAddress : 1;
+                uint8_t addressIncrement : 1;
+                uint8_t nametableAddress : 2;                          
+            #endif 
             } bits;
             uint8_t byte;
         }controlRegister;
@@ -167,24 +180,37 @@ class PPU
         union PPU_MASK
         {
             /*
-             * 7  bit  0
-             * ---- ----
-             * BGRs bMmG
+             * Bit 0     : Grayscale (0: normal color, 1: produce a greyscale display)
+             * Bit 1     : Show background in leftmost 8 pixels of screen (1: show, 0: hide)
+             * Bit 2     : Show sprite in leftmost 8 pixels of screen (1: show, 0: hide)
+             * Bit 3     : Show background (1: show, 0: hide)
+             * Bit 4     : Show sprite (1: show, 0: hide)
+             * Bits 5-6-7: R-G-B (NTSC colors). In PAL and Dendy swaps green and red
+             *
+             *    0     1     2     3     4     5     6     7
+             * +-----+-----+-----+-----+-----+-----+-----+-----+
+             * |     |     |     |     |     |                 |     
+             * |  G  |  m  |  M  |  b  |  s  |       BGR       |
+             * |     |     |     |     |     |                 |
+             * +-----+-----+-----+-----+-----+-----+-----+-----+
              */
             struct PPU_MASK_BITS
             {
-                // Grayscale (0: normal color, 1: produce a greyscale display)
+            #if __BYTE_ORDER == __LITTLE_ENDIAN
                 uint8_t grayScale : 1;
-                // Show background in leftmost 8 pixels of screen (1: show, 0: hide)
                 uint8_t noBackgroundClipping : 1;
-                // Show sprite in leftmost 8 pixels of screen (1: show, 0: hide)
                 uint8_t noSpriteClipping : 1;
-                // Show background (1: show, 0: hide)
                 uint8_t showBackground : 1;
-                // Show sprite (1: show, 0: hide)
                 uint8_t showSprite : 1;
-                // R-G-B (NTSC colors). In PAL and Dendy swaps green and red
+                uint8_t color : 3;            
+            #elif __BYTE_ORDER == __BIG_ENDIAN  
                 uint8_t color : 3;
+                uint8_t showSprite : 1;         
+                uint8_t showBackground : 1;
+                uint8_t noSpriteClipping : 1;
+                uint8_t noBackgroundClipping : 1;
+                uint8_t grayScale : 1;        
+            #endif 
             }bits;
             uint8_t byte;
         }maskRegister;
@@ -197,41 +223,52 @@ class PPU
              * ---- ----
              * VSO. ....
              */
+            /*
+             * Bits 0-4: Least significant bits previously written into a PPU registe
+             * Bit 5   : Sprite overflow. The intent was for this flag to be set whenever 
+             *           more than eight sprites appear on a scanline. This flag is set
+             *           during sprite evaluation. Cleared at dot 1 (the second dot) of the 
+             *           pre-render line
+             * Bit 6   :  Set when a nonzero pixel of sprite 0 overlaps a nonzero background pixel
+             *            Cleared at dot 1 of the pre-render line.  
+             *            Used for raster timing.
+             *             - Sprite 0 hit does not happen:
+             *                 + If background or sprite rendering is disabled in PPUMASK ($2001)
+             *                 + At x=0 to x=7 if the left-side clipping window is enabled (if bit 2 or bit 1 of PPUMASK is 0)
+             *                 + At x=255, for an obscure reason related to the pixel pipeline
+             *                 + At any pixel where the background or sprite pixel is transparent (2-bit color index from the CHR pattern is %00)
+             *                 + If sprite 0 hit has already occurred this frame. Bit 6 of PPUSTATUS ($2002) is cleared to 0 at dot 1 of the
+             *                   pre-render line. This means only the first sprite 0 hit in a frame can be detected
+             *             - Sprite 0 hit happens regardless of the following::
+             *                 + Sprite priority. Sprite 0 can still hit the background from behind.
+             *                 + The pixel colors. Only the CHR pattern bits are relevant, not the actual rendered colors, and any CHR color index except %00 is considered opaque
+             *                 + The palette. The contents of the palette are irrelevant to sprite 0 hits. For example: a black ($0F) sprite pixel can hit a black ($0F) background as long as neither is the transparent color index %00.
+             *                 + The PAL PPU blanking on the left and right edges at x=0, x=1, and x=254 
+             * Bit 7   : Vertical blank has started (0: not in vblank; 1: in vblank)
+             *           Set at dot 1 of line 241 (the line *after* the post-render line) 
+             *           Cleared after reading $2002 and at dot 1 of the pre-render line 
+             *           Read PPUSTATUS: Return old status of NMI_occurred in bit 7, then set NMI_occurred to false
+             *
+             *    0     1     2     3     4     5     6     7
+             * +-----+-----+-----+-----+-----+-----+-----+-----+
+             * |                             |     |     |     |
+             * |           Reserved          |  O  |  S  |  V  |
+             * |                             |     |     |     |
+             * +-----+-----+-----+-----+-----+-----+-----+-----+
+             */
             struct PPU_STATUS_BITS
             {
-                // Least significant bits previously written into a PPU register
+            #if __BYTE_ORDER == __LITTLE_ENDIAN
                 uint8_t reserved : 5; 
-                /*
-                 * Sprite overflow. The intent was for this flag to be set whenever more than eight sprites appear on a scanline
-                 * This flag is set during sprite evaluation
-                 * Cleared at dot 1 (the second dot) of the pre-render line.
-                 */
                 uint8_t spriteOverflow : 1;
-                /*
-                 * Set when a nonzero pixel of sprite 0 overlaps a nonzero background pixel
-                 * Cleared at dot 1 of the pre-render line.  
-                 * Used for raster timing.
-                 * - Sprite 0 hit does not happen:
-                 *   + If background or sprite rendering is disabled in PPUMASK ($2001)
-                 *   + At x=0 to x=7 if the left-side clipping window is enabled (if bit 2 or bit 1 of PPUMASK is 0)
-                 *   + At x=255, for an obscure reason related to the pixel pipeline
-                 *   + At any pixel where the background or sprite pixel is transparent (2-bit color index from the CHR pattern is %00)
-                 *   + If sprite 0 hit has already occurred this frame. Bit 6 of PPUSTATUS ($2002) is cleared to 0 at dot 1 of the
-                 *     pre-render line. This means only the first sprite 0 hit in a frame can be detected
-                 * - Sprite 0 hit happens regardless of the following::
-                 *   + Sprite priority. Sprite 0 can still hit the background from behind.
-                 *   + The pixel colors. Only the CHR pattern bits are relevant, not the actual rendered colors, and any CHR color index except %00 is considered opaque
-                 *   + The palette. The contents of the palette are irrelevant to sprite 0 hits. For example: a black ($0F) sprite pixel can hit a black ($0F) background as long as neither is the transparent color index %00.
-                 *   + The PAL PPU blanking on the left and right edges at x=0, x=1, and x=254 
-                 */
                 uint8_t sprite0Hit : 1;
-                /*
-                 * Vertical blank has started (0: not in vblank; 1: in vblank)
-                 * Set at dot 1 of line 241 (the line *after* the post-render line) 
-                 * Cleared after reading $2002 and at dot 1 of the pre-render line 
-                 * Read PPUSTATUS: Return old status of NMI_occurred in bit 7, then set NMI_occurred to false
-                 */
-                uint8_t vblank : 1;
+                uint8_t vblank : 1;          
+            #elif __BYTE_ORDER == __BIG_ENDIAN  
+                uint8_t vblank : 1;        
+                uint8_t sprite0Hit : 1;
+                uint8_t spriteOverflow : 1;     
+                uint8_t reserved : 5;
+            #endif          
             }bits;
             uint8_t byte;
         }statusRegister;
@@ -293,6 +330,7 @@ class PPU
          *  ||| ++-------------- nametable select
          *  +++----------------- fine Y scroll      
          */
+        // NOTE: I don't use struct bit field here because the struct alignment problem :)
         uint16_t currentVRAMAddress, temporaryVRAMAddress;  // 0x2005, 0x2006 x2Write. PPU SCROLL and PPU ADDRESS
         uint8_t fineXScroll; // x 3 bits
         uint8_t toggle; // w 1 bits first/second write toggle 

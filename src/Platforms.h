@@ -3,11 +3,8 @@
 
 //#define _DEBUG_
 // NES
-#define NES_FILE "../rom/Mario.nes"
-//#define NES_FILE "../test/ppu/sprite0hit/06.right_edge.nes"
-
-//#define CPU_FREQUENCY 1789773
-#define CPU_FREQUENCY 1789772.7272727272727272
+#define NES_FILE "../rom/Contra.nes"
+#define CPU_FREQUENCY 1789773.7272727272727272
 // Display
 #define SCREEN_WIDTH 256
 #define SCREEN_HEIGHT 240

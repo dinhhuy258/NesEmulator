@@ -477,6 +477,7 @@ void PPU::FetchSpritePalette(uint8_t i, uint8_t row, uint8_t spriteNumber)
          * ||||||||
          * |||||||+- Bank ($0000 or $1000) of tiles
          * +++++++-- Tile number of top of sprite (0 to 254; bottom half gets the next tile)
+         *
          * Thus, the pattern table memory map for 8x16 sprites looks like this:
          * $00: $0000-$001F
          * $01: $1000-$101F
@@ -488,12 +489,13 @@ void PPU::FetchSpritePalette(uint8_t i, uint8_t row, uint8_t spriteNumber)
          * $FF: $1FE0-$1FFF
          */
         tileIndexNumber &= 0xFE;
+        uint8_t table = tileIndexNumber & 1;
         if (y > 7)
         {
             ++tileIndexNumber;
             y -= 8;
         }
-        address = 0x1000 * (tileIndexNumber & 0x01) + tileIndexNumber * 16 + y;
+        address = 0x1000 * table + tileIndexNumber * 16 + y;
     }
     uint8_t tileHigh = vram->Read(address + 8); 
     uint8_t tileLow = vram->Read(address); 
@@ -571,6 +573,10 @@ void PPU::RenderPixel()
     {
         spriteColor == 0;
     }
+    if (scanline < 8)
+    {
+        spriteColor = 0; // Fix contra renderring
+    }
     /*
      * The palette entry at $3F00 is the background colour and is used for transparency. Mirroring is used so that every four bytes in
      * the palettes is a copy of $3F00. Therefore $3F04, $3F08,$3F0C, $3F10, $3F14, $3F18 and $3F1C are just copies of $3F00 and the total
@@ -612,7 +618,7 @@ void PPU::RenderPixel()
             color = backgroundColor;
         }
         // Check zero hit
-        if (secondaryOAM[index].isSpriteZero && x != 255)
+        if ((secondaryOAM[index].isSpriteZero) && (x != 255))
         {
             statusRegister.bits.sprite0Hit = 1;
         }
@@ -662,8 +668,6 @@ void PPU::Step()
     bool preRenderScanline = (scanline == 261);
     bool visibleScanline = (scanline <= 239);
     bool postRenderScanline = (scanline == 240);
-    bool VBScanline = (scanline >= 241 && scanline <= 260);
-
     bool visibleCycle = (cycles >= 1 && cycles <= 256);
     bool fetchCycle = visibleCycle | (cycles >= 321 && cycles <= 336); //   337->340 is unused NT fetch
     if ((maskRegister.bits.showBackground == 1) || (maskRegister.bits.showSprite == 1)) // If renderring enable

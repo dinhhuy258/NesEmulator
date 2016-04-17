@@ -9,6 +9,7 @@ SOURCES=main.cpp \
 		Cartridge.cpp \
 		Mapper.cpp \
 		Mapper0.cpp \
+		Mapper2.cpp \
 		Controller.cpp
 BIN=NesEmulator
 
