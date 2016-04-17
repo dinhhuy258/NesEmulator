@@ -25,7 +25,7 @@ I wrote this emulator just for studying
 - NROM (0)
 
 ##Issues
-- Haven't implement APU
+- Haven't implemented APU
 - There are some issues with renderring but I think it's ok and I will fix it later
 - Few mapper are supported
 
