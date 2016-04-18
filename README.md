@@ -23,10 +23,11 @@ I wrote this emulator just for studying
 
 ##Mappers
 - NROM (0)
+- UNROM (2)
 
 ##Issues
 - Haven't implemented APU
-- There are some issues with renderring but I think it's ok and I will fix it later
+- There are some issues with renderring I will fix it later
 - Few mapper are supported
 
 Thanks to the [NES community](http://nesdev.com/) for helping me complete this project
